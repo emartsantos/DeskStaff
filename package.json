@@ -1,12 +1,15 @@
 {
+  "homepage": "https://emartsantos.github.io/Deskstaff",
   "name": "deskstaff",
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "react-router build",
-    "dev": "react-router dev",
+    "build": "vite build",
+    "dev": "vite",
     "start": "react-router-serve ./build/server/index.js",
-    "typecheck": "react-router typegen && tsc"
+    "typecheck": "react-router typegen && tsc",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d build"
   },
   "dependencies": {
     "@radix-ui/react-checkbox": "^1.3.3",
@@ -22,7 +25,6 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "framer-motion": "^12.24.10",
-    "gh-pages": "^6.3.0",
     "isbot": "^5.1.31",
     "lucide-react": "^0.562.0",
     "react": "^19.2.3",
@@ -37,6 +39,7 @@
     "@types/node": "^22",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
+    "gh-pages": "^6.3.0",
     "tailwindcss": "^4.1.13",
     "tw-animate-css": "^1.4.0",
     "typescript": "^5.9.2",
