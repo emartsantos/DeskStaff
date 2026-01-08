@@ -15,6 +15,7 @@ import {
   MailWarning,
   Info,
   Loader2,
+  UserX,
 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
@@ -37,6 +38,13 @@ interface RegisterFormData {
   newsletter: boolean;
 }
 
+// Cache for checked emails to reduce redundant API calls
+const emailCheckCache = new Map<
+  string,
+  { exists: boolean; timestamp: number }
+>();
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
 export default function Register() {
   const navigate = useNavigate();
 
@@ -56,8 +64,9 @@ export default function Register() {
   const [showConfirmPassword, setShowConfirmPassword] = React.useState(false);
   const [errors, setErrors] = React.useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [isCheckingEmail, setIsCheckingEmail] = React.useState(false);
   const [emailSuggestions, setEmailSuggestions] = React.useState<string[]>([]);
-  const [successMessage, setSuccessMessage] = React.useState("");
+  const [emailExists, setEmailExists] = React.useState<boolean>(false);
 
   // List of disposable/temporary email domains
   const disposableEmailDomains = [
@@ -145,8 +154,65 @@ export default function Register() {
     },
   };
 
-  // Email validation and suggestions
-  const validateEmail = (email: string) => {
+  // Check if email exists in database
+  const checkEmailExists = React.useCallback(async (email: string) => {
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Only check if email is valid
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(normalizedEmail)) {
+      setEmailExists(false);
+      return false;
+    }
+
+    // Check cache first
+    const cached = emailCheckCache.get(normalizedEmail);
+    if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+      setEmailExists(cached.exists);
+      return cached.exists;
+    }
+
+    setIsCheckingEmail(true);
+    try {
+      // DIRECT DATABASE QUERY - Query your users table
+      const { data: userData, error: userError } = await supabase
+        .from("users")
+        .select("email")
+        .eq("email", normalizedEmail)
+        .maybeSingle(); // Use maybeSingle to avoid throwing error if no results
+
+      if (userError) {
+        console.error("Database query error:", userError);
+        // On error, assume email doesn't exist to avoid false positives
+        emailCheckCache.set(normalizedEmail, {
+          exists: false,
+          timestamp: Date.now(),
+        });
+        setEmailExists(false);
+        return false;
+      }
+
+      // If userData exists, email is already registered
+      const exists = !!userData;
+      emailCheckCache.set(normalizedEmail, { exists, timestamp: Date.now() });
+      setEmailExists(exists);
+      return exists;
+    } catch (error) {
+      console.error("Error checking email:", error);
+      // On error, assume email doesn't exist to avoid false positives
+      emailCheckCache.set(normalizedEmail, {
+        exists: false,
+        timestamp: Date.now(),
+      });
+      setEmailExists(false);
+      return false;
+    } finally {
+      setIsCheckingEmail(false);
+    }
+  }, []);
+
+  // Optimized email validation
+  const validateEmail = React.useCallback((email: string) => {
     const newErrors: Record<string, string> = {};
     const suggestions: string[] = [];
 
@@ -163,7 +229,6 @@ export default function Register() {
       return { errors: newErrors, suggestions };
     }
 
-    // Check for common typos in domain
     const [localPart, domain] = email.split("@");
     if (domain) {
       // Check for disposable/temporary emails
@@ -202,6 +267,14 @@ export default function Register() {
         "co",
         "ai",
         "dev",
+        "me",
+        "info",
+        "biz",
+        "us",
+        "uk",
+        "ca",
+        "au",
+        "in",
       ];
       const tld = domain.split(".").pop()?.toLowerCase();
       if (tld && !validTLDs.includes(tld) && tld.length <= 3) {
@@ -216,26 +289,16 @@ export default function Register() {
       if (domain.split(".").length > 3) {
         suggestions.push("Email domain has too many subdomains");
       }
-
-      // Check for free email providers with strict limitations
-      const freeProviders = [
-        "gmail.com",
-        "yahoo.com",
-        "outlook.com",
-        "hotmail.com",
-      ];
-      if (freeProviders.includes(domain.toLowerCase())) {
-        suggestions.push(
-          "Consider using a work or institutional email for better delivery"
-        );
-      }
     }
 
     return { errors: newErrors, suggestions };
-  };
+  }, []);
 
   // Levenshtein distance for typo detection
   const levenshteinDistance = (a: string, b: string): number => {
+    if (a.length === 0) return b.length;
+    if (b.length === 0) return a.length;
+
     const matrix = Array(b.length + 1)
       .fill(null)
       .map(() => Array(a.length + 1).fill(null));
@@ -257,18 +320,22 @@ export default function Register() {
     return matrix[b.length][a.length];
   };
 
+  // Debounced email check
+  const debouncedEmailCheck = React.useRef<NodeJS.Timeout>();
+
   // Handle input changes
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { id, value, type, checked } = e.target;
+
+    // Clear email exists state when email changes
+    if (id === "email" && emailExists) {
+      setEmailExists(false);
+    }
+
     setFormData((prev) => ({
       ...prev,
       [id]: type === "checkbox" ? checked : value,
     }));
-
-    // Clear success message when user starts typing
-    if (successMessage) {
-      setSuccessMessage("");
-    }
 
     // Validate email in real-time
     if (id === "email") {
@@ -280,11 +347,37 @@ export default function Register() {
         const newErrors = { ...prev };
         if (emailErrors.email) {
           newErrors.email = emailErrors.email;
+          delete newErrors.submit; // Clear any previous submit errors
+          // Clear email exists state if there's an error
+          setEmailExists(false);
         } else if (newErrors.email) {
           delete newErrors.email;
         }
         return newErrors;
       });
+
+      // Clear previous debounce timer
+      if (debouncedEmailCheck.current) {
+        clearTimeout(debouncedEmailCheck.current);
+      }
+
+      // Only check if email format is valid and not disposable
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (emailRegex.test(value) && !emailErrors.email) {
+        // Check if email is not disposable
+        const domain = value.split("@")[1];
+        const isDisposable =
+          domain &&
+          disposableEmailDomains.some((disposable) =>
+            domain.toLowerCase().includes(disposable.toLowerCase())
+          );
+
+        if (!isDisposable) {
+          debouncedEmailCheck.current = setTimeout(() => {
+            checkEmailExists(value);
+          }, 800); // 800ms debounce - longer to ensure user is done typing
+        }
+      }
     } else {
       // Clear error for other fields
       if (errors[id]) {
@@ -296,6 +389,15 @@ export default function Register() {
       }
     }
   };
+
+  // Cleanup on unmount
+  React.useEffect(() => {
+    return () => {
+      if (debouncedEmailCheck.current) {
+        clearTimeout(debouncedEmailCheck.current);
+      }
+    };
+  }, []);
 
   // Validate form
   const validateForm = () => {
@@ -309,6 +411,12 @@ export default function Register() {
     // Email validation
     const { errors: emailErrors } = validateEmail(formData.email);
     Object.assign(newErrors, emailErrors);
+
+    // Only check email exists if no other email errors
+    if (!emailErrors.email && emailExists) {
+      newErrors.email =
+        "This email is already registered. Please use a different email or try logging in.";
+    }
 
     // Password validation
     if (!formData.password) {
@@ -335,152 +443,115 @@ export default function Register() {
     return Object.keys(newErrors).length === 0;
   };
 
-  // Check if email already exists in Supabase
-  const checkEmailExists = async (email: string): Promise<boolean> => {
-    try {
-      const { data, error } = await supabase
-        .from("users")
-        .select("email")
-        .eq("email", email.toLowerCase())
-        .single();
-
-      if (error && error.code !== "PGRST116") {
-        // PGRST116 is "no rows returned"
-        console.error("Error checking email:", error);
-        return false;
-      }
-
-      return !!data; // Returns true if email exists
-    } catch (error) {
-      console.error("Error checking email:", error);
-      return false;
-    }
-  };
-
-  // Save user data to Supabase
-  const saveUserToSupabase = async (userData: RegisterFormData) => {
-    const user = {
-      email: userData.email.toLowerCase(),
-      first_name: userData.firstName.trim(),
-      last_name: userData.lastName.trim(),
-      full_name: `${userData.firstName.trim()} ${userData.lastName.trim()}`,
-      newsletter_subscribed: userData.newsletter,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-
-    // For security, we don't store password in user table
-    // Instead, we'll use Supabase Auth for authentication
-    // But we can still store profile information
-
-    const { data, error } = await supabase
-      .from("users")
-      .insert([user])
-      .select();
-
-    if (error) {
-      throw new Error(`Failed to save user: ${error.message}`);
-    }
-
-    return data;
-  };
-
-  // Sign up user with Supabase Auth
-  const signUpWithSupabase = async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signUp({
-      email: email.toLowerCase(),
-      password: password,
-      options: {
-        data: {
-          first_name: formData.firstName.trim(),
-          last_name: formData.lastName.trim(),
-          full_name: `${formData.firstName.trim()} ${formData.lastName.trim()}`,
-          newsletter_subscribed: formData.newsletter,
-        },
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
-
-    if (error) {
-      throw new Error(`Sign up failed: ${error.message}`);
-    }
-
-    return data;
-  };
-
-  // Handle form submission with Supabase
+  // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // First validate form client-side
     if (!validateForm()) {
       return;
     }
 
+    // Double-check email existence before proceeding (direct database query)
+    const normalizedEmail = formData.email.toLowerCase();
+    try {
+      const { data: userData } = await supabase
+        .from("users")
+        .select("email")
+        .eq("email", normalizedEmail)
+        .maybeSingle();
+
+      if (userData) {
+        // Update cache
+        emailCheckCache.set(normalizedEmail, {
+          exists: true,
+          timestamp: Date.now(),
+        });
+        setEmailExists(true);
+        setErrors({
+          submit:
+            "This email is already registered. Please use a different email or try logging in.",
+        });
+        return;
+      }
+    } catch (error) {
+      console.error("Final email check error:", error);
+      // Continue with registration if check fails
+    }
+
     setIsSubmitting(true);
     setErrors({});
-    setSuccessMessage("");
 
     try {
-      // Check if email already exists
-      const emailExists = await checkEmailExists(formData.email);
-      if (emailExists) {
-        throw new Error(
-          "Email already registered. Please use a different email or try logging in."
-        );
-      }
+      // Get the current origin
+      const siteUrl = window.location.origin;
 
       // Sign up with Supabase Auth
-      const { user } = await signUpWithSupabase(
-        formData.email,
-        formData.password
-      );
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: normalizedEmail,
+        password: formData.password,
+        options: {
+          data: {
+            first_name: formData.firstName.trim(),
+            last_name: formData.lastName.trim(),
+            full_name: `${formData.firstName.trim()} ${formData.lastName.trim()}`,
+            newsletter_subscribed: formData.newsletter,
+          },
+          emailRedirectTo: `${siteUrl}/auth/callback`,
+        },
+      });
 
-      if (!user) {
+      if (authError) {
+        console.error("Supabase auth error:", authError);
+
+        // Handle specific Supabase errors
+        if (authError.message.includes("User already registered")) {
+          // Update cache and check database to be sure
+          emailCheckCache.set(normalizedEmail, {
+            exists: true,
+            timestamp: Date.now(),
+          });
+          setEmailExists(true);
+          throw new Error(
+            "This email is already registered. Please use a different email or try logging in."
+          );
+        } else if (authError.message.includes("Password should be at least")) {
+          throw new Error(
+            "Password is too weak. Please use a stronger password."
+          );
+        } else if (authError.message.includes("Invalid email")) {
+          throw new Error("Please enter a valid email address.");
+        } else if (authError.message.includes("rate limit")) {
+          throw new Error(
+            "Too many attempts. Please try again in a few minutes."
+          );
+        } else {
+          throw new Error(`Registration failed: ${authError.message}`);
+        }
+      }
+
+      if (!authData.user) {
         throw new Error("Registration failed. Please try again.");
       }
 
-      // Save additional user data to Supabase
-      await saveUserToSupabase(formData);
+      // Store email in localStorage for post-registration flow
+      if (typeof window !== "undefined") {
+        localStorage.setItem("pending_email", formData.email);
+      }
 
-      // Success - show success message
-      setSuccessMessage(
-        "Account created successfully! Please check your email to verify your account."
-      );
-
-      // Clear form
-      setFormData({
-        firstName: "",
-        lastName: "",
-        email: "",
-        password: "",
-        confirmPassword: "",
-        terms: false,
-        newsletter: false,
+      // Redirect to auth/callback
+      navigate("/auth/callback", {
+        state: {
+          email: formData.email,
+          message:
+            "Registration successful! Please check your email to verify your account.",
+        },
       });
-
-      // Auto-redirect after 3 seconds
-      setTimeout(() => {
-        navigate("/login");
-      }, 3000);
     } catch (error) {
       console.error("Registration error:", error);
 
       if (error instanceof Error) {
-        // Handle specific Supabase errors
-        if (error.message.includes("User already registered")) {
-          setErrors({
-            submit:
-              "Email already registered. Please use a different email or try logging in.",
-          });
-        } else if (error.message.includes("Password should be at least")) {
-          setErrors({
-            submit: "Password is too weak. Please use a stronger password.",
-          });
-        } else if (error.message.includes("Invalid email")) {
-          setErrors({ submit: "Please enter a valid email address." });
-        } else {
-          setErrors({ submit: error.message });
-        }
+        setErrors({ submit: error.message });
       } else {
         setErrors({ submit: "Registration failed. Please try again." });
       }
@@ -495,6 +566,7 @@ export default function Register() {
     passwordsMatch &&
     formData.password.length >= 8 &&
     !errors.email &&
+    !emailExists &&
     formData.email.includes("@");
 
   // Email domain info
@@ -560,15 +632,6 @@ export default function Register() {
             Join us today! Please enter your details.
           </p>
         </div>
-
-        {successMessage && (
-          <Alert className="mb-6 bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
-            <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-500" />
-            <AlertDescription className="text-green-800 dark:text-green-300">
-              {successMessage}
-            </AlertDescription>
-          </Alert>
-        )}
 
         {errors.submit && (
           <Alert variant="destructive" className="mb-6">
@@ -648,16 +711,29 @@ export default function Register() {
                   </Tooltip>
                 </TooltipProvider>
               </Label>
-              {emailDomainInfo &&
-                formData.email.includes("@") &&
-                !errors.email && (
-                  <div
-                    className={`text-xs font-medium flex items-center gap-1 ${emailDomainInfo.color}`}
-                  >
-                    {emailDomainInfo.icon}
-                    <span>{emailDomainInfo.message}</span>
-                  </div>
+              <div className="flex items-center gap-2">
+                {emailDomainInfo &&
+                  formData.email.includes("@") &&
+                  !errors.email && (
+                    <div
+                      className={`text-xs font-medium flex items-center gap-1 ${emailDomainInfo.color}`}
+                    >
+                      {emailDomainInfo.icon}
+                      <span>{emailDomainInfo.message}</span>
+                    </div>
+                  )}
+                {isCheckingEmail && (
+                  <Loader2 className="h-3 w-3 animate-spin text-gray-500" />
                 )}
+                {emailExists &&
+                  !isCheckingEmail &&
+                  formData.email.includes("@") && (
+                    <div className="flex items-center gap-1 text-red-500 text-xs">
+                      <UserX className="h-3 w-3" />
+                      <span>Already registered</span>
+                    </div>
+                  )}
+              </div>
             </div>
 
             <div className="relative">
@@ -666,7 +742,9 @@ export default function Register() {
                 type="email"
                 placeholder="you@example.com"
                 className={`dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400 pr-10 ${
-                  errors.email ? "border-red-500 dark:border-red-500" : ""
+                  errors.email || emailExists
+                    ? "border-red-500 dark:border-red-500"
+                    : ""
                 }`}
                 value={formData.email}
                 onChange={handleChange}
@@ -674,20 +752,24 @@ export default function Register() {
                 required
               />
               <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                {errors.email ? (
+                {errors.email || emailExists ? (
                   <MailWarning className="h-4 w-4 text-red-500" />
-                ) : formData.email.includes("@") && !errors.email ? (
+                ) : formData.email.includes("@") &&
+                  !errors.email &&
+                  !emailExists ? (
                   <CheckCircle className="h-4 w-4 text-green-500" />
                 ) : null}
               </div>
             </div>
 
             {/* Email Errors */}
-            {errors.email && (
+            {(errors.email || emailExists) && (
               <div className="space-y-1">
                 <p className="text-xs text-red-500 flex items-center gap-1">
                   <XCircle className="h-3 w-3" />
-                  {errors.email}
+                  {emailExists
+                    ? "This email is already registered. Please use a different email or try logging in."
+                    : errors.email}
                 </p>
                 {emailSuggestions.length > 0 && (
                   <div className="text-xs text-amber-600 dark:text-amber-400">
@@ -724,24 +806,25 @@ export default function Register() {
                     label: "Not a disposable/temporary email",
                   },
                   {
-                    key: "common",
+                    key: "available",
                     met:
-                      formData.email.includes("@") &&
-                      (commonEmailDomains.some((domain) =>
-                        formData.email.toLowerCase().endsWith(`@${domain}`)
-                      ) ||
-                        true), // Always show as valid if not disposable
-                    label: "Common email provider or custom domain",
+                      !emailExists &&
+                      !isCheckingEmail &&
+                      formData.email.includes("@"),
+                    label: "Email not already registered",
+                    loading: isCheckingEmail,
                   },
-                ].map(({ key, met, label }) => (
+                ].map(({ key, met, label, loading }) => (
                   <div key={key} className="flex items-center gap-2">
-                    {met || !formData.email ? (
+                    {loading ? (
+                      <Loader2 className="h-3 w-3 animate-spin text-gray-500" />
+                    ) : met || !formData.email ? (
                       <CheckCircle className="h-3 w-3 text-green-500" />
                     ) : (
                       <XCircle className="h-3 w-3 text-red-500" />
                     )}
                     <span
-                      className={`text-xs ${met ? "text-green-600 dark:text-green-500" : "text-gray-500 dark:text-gray-400"}`}
+                      className={`text-xs ${met ? "text-green-600 dark:text-green-500" : loading ? "text-gray-500" : "text-red-500 dark:text-red-400"}`}
                     >
                       {label}
                     </span>
