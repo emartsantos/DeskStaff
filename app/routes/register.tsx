@@ -14,6 +14,7 @@ import {
   XCircle,
   MailWarning,
   Info,
+  Loader2,
 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
@@ -22,14 +23,25 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { supabase } from "@/lib/supabase";
 
 type PasswordStrength = "weak" | "medium" | "strong" | "very-strong";
+
+interface RegisterFormData {
+  firstName: string;
+  lastName: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
+  terms: boolean;
+  newsletter: boolean;
+}
 
 export default function Register() {
   const navigate = useNavigate();
 
   // Form state
-  const [formData, setFormData] = React.useState({
+  const [formData, setFormData] = React.useState<RegisterFormData>({
     firstName: "",
     lastName: "",
     email: "",
@@ -45,6 +57,7 @@ export default function Register() {
   const [errors, setErrors] = React.useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [emailSuggestions, setEmailSuggestions] = React.useState<string[]>([]);
+  const [successMessage, setSuccessMessage] = React.useState("");
 
   // List of disposable/temporary email domains
   const disposableEmailDomains = [
@@ -252,6 +265,11 @@ export default function Register() {
       [id]: type === "checkbox" ? checked : value,
     }));
 
+    // Clear success message when user starts typing
+    if (successMessage) {
+      setSuccessMessage("");
+    }
+
     // Validate email in real-time
     if (id === "email") {
       const { errors: emailErrors, suggestions } = validateEmail(value);
@@ -317,7 +335,80 @@ export default function Register() {
     return Object.keys(newErrors).length === 0;
   };
 
-  // Handle form submission
+  // Check if email already exists in Supabase
+  const checkEmailExists = async (email: string): Promise<boolean> => {
+    try {
+      const { data, error } = await supabase
+        .from("users")
+        .select("email")
+        .eq("email", email.toLowerCase())
+        .single();
+
+      if (error && error.code !== "PGRST116") {
+        // PGRST116 is "no rows returned"
+        console.error("Error checking email:", error);
+        return false;
+      }
+
+      return !!data; // Returns true if email exists
+    } catch (error) {
+      console.error("Error checking email:", error);
+      return false;
+    }
+  };
+
+  // Save user data to Supabase
+  const saveUserToSupabase = async (userData: RegisterFormData) => {
+    const user = {
+      email: userData.email.toLowerCase(),
+      first_name: userData.firstName.trim(),
+      last_name: userData.lastName.trim(),
+      full_name: `${userData.firstName.trim()} ${userData.lastName.trim()}`,
+      newsletter_subscribed: userData.newsletter,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    // For security, we don't store password in user table
+    // Instead, we'll use Supabase Auth for authentication
+    // But we can still store profile information
+
+    const { data, error } = await supabase
+      .from("users")
+      .insert([user])
+      .select();
+
+    if (error) {
+      throw new Error(`Failed to save user: ${error.message}`);
+    }
+
+    return data;
+  };
+
+  // Sign up user with Supabase Auth
+  const signUpWithSupabase = async (email: string, password: string) => {
+    const { data, error } = await supabase.auth.signUp({
+      email: email.toLowerCase(),
+      password: password,
+      options: {
+        data: {
+          first_name: formData.firstName.trim(),
+          last_name: formData.lastName.trim(),
+          full_name: `${formData.firstName.trim()} ${formData.lastName.trim()}`,
+          newsletter_subscribed: formData.newsletter,
+        },
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
+      },
+    });
+
+    if (error) {
+      throw new Error(`Sign up failed: ${error.message}`);
+    }
+
+    return data;
+  };
+
+  // Handle form submission with Supabase
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -326,28 +417,73 @@ export default function Register() {
     }
 
     setIsSubmitting(true);
+    setErrors({});
+    setSuccessMessage("");
 
     try {
-      // Simulate API call with email validation
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      // Check if email already exists (simulated)
-      const existingEmails = ["test@example.com", "user@gmail.com"]; // In real app, this would be API call
-      if (existingEmails.includes(formData.email.toLowerCase())) {
+      // Check if email already exists
+      const emailExists = await checkEmailExists(formData.email);
+      if (emailExists) {
         throw new Error(
           "Email already registered. Please use a different email or try logging in."
         );
       }
 
-      // Success - navigate to dashboard
-      navigate("/dashboard");
-    } catch (error) {
-      setErrors({
-        submit:
-          error instanceof Error
-            ? error.message
-            : "Registration failed. Please try again.",
+      // Sign up with Supabase Auth
+      const { user } = await signUpWithSupabase(
+        formData.email,
+        formData.password
+      );
+
+      if (!user) {
+        throw new Error("Registration failed. Please try again.");
+      }
+
+      // Save additional user data to Supabase
+      await saveUserToSupabase(formData);
+
+      // Success - show success message
+      setSuccessMessage(
+        "Account created successfully! Please check your email to verify your account."
+      );
+
+      // Clear form
+      setFormData({
+        firstName: "",
+        lastName: "",
+        email: "",
+        password: "",
+        confirmPassword: "",
+        terms: false,
+        newsletter: false,
       });
+
+      // Auto-redirect after 3 seconds
+      setTimeout(() => {
+        navigate("/login");
+      }, 3000);
+    } catch (error) {
+      console.error("Registration error:", error);
+
+      if (error instanceof Error) {
+        // Handle specific Supabase errors
+        if (error.message.includes("User already registered")) {
+          setErrors({
+            submit:
+              "Email already registered. Please use a different email or try logging in.",
+          });
+        } else if (error.message.includes("Password should be at least")) {
+          setErrors({
+            submit: "Password is too weak. Please use a stronger password.",
+          });
+        } else if (error.message.includes("Invalid email")) {
+          setErrors({ submit: "Please enter a valid email address." });
+        } else {
+          setErrors({ submit: error.message });
+        }
+      } else {
+        setErrors({ submit: "Registration failed. Please try again." });
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -425,6 +561,15 @@ export default function Register() {
           </p>
         </div>
 
+        {successMessage && (
+          <Alert className="mb-6 bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
+            <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-500" />
+            <AlertDescription className="text-green-800 dark:text-green-300">
+              {successMessage}
+            </AlertDescription>
+          </Alert>
+        )}
+
         {errors.submit && (
           <Alert variant="destructive" className="mb-6">
             <AlertCircle className="h-4 w-4" />
@@ -448,6 +593,7 @@ export default function Register() {
                 }`}
                 value={formData.firstName}
                 onChange={handleChange}
+                disabled={isSubmitting}
                 required
               />
               {errors.firstName && (
@@ -470,6 +616,7 @@ export default function Register() {
                 }`}
                 value={formData.lastName}
                 onChange={handleChange}
+                disabled={isSubmitting}
                 required
               />
               {errors.lastName && (
@@ -523,6 +670,7 @@ export default function Register() {
                 }`}
                 value={formData.email}
                 onChange={handleChange}
+                disabled={isSubmitting}
                 required
               />
               <div className="absolute right-3 top-1/2 -translate-y-1/2">
@@ -631,12 +779,14 @@ export default function Register() {
                 }`}
                 value={formData.password}
                 onChange={handleChange}
+                disabled={isSubmitting}
                 required
               />
               <button
                 type="button"
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 disabled:opacity-50"
                 onClick={() => setShowPassword(!showPassword)}
+                disabled={isSubmitting}
               >
                 {showPassword ? (
                   <EyeOff className="h-4 w-4" />
@@ -718,12 +868,14 @@ export default function Register() {
                 }`}
                 value={formData.confirmPassword}
                 onChange={handleChange}
+                disabled={isSubmitting}
                 required
               />
               <button
                 type="button"
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 disabled:opacity-50"
                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                disabled={isSubmitting}
               >
                 {showConfirmPassword ? (
                   <EyeOff className="h-4 w-4" />
@@ -760,6 +912,7 @@ export default function Register() {
                     className={`mt-1 dark:border-gray-600 dark:data-[state=checked]:bg-primary ${
                       errors.terms ? "border-red-500 dark:border-red-500" : ""
                     }`}
+                    disabled={isSubmitting}
                   />
                 </div>
 
@@ -772,6 +925,7 @@ export default function Register() {
                     <Link
                       to="/terms"
                       className="text-primary hover:underline dark:text-primary-400"
+                      onClick={(e) => isSubmitting && e.preventDefault()}
                     >
                       Terms
                     </Link>{" "}
@@ -779,6 +933,7 @@ export default function Register() {
                     <Link
                       to="/privacy"
                       className="text-primary hover:underline dark:text-primary-400"
+                      onClick={(e) => isSubmitting && e.preventDefault()}
                     >
                       Privacy Policy
                     </Link>
@@ -792,6 +947,28 @@ export default function Register() {
                 </div>
               </div>
             </div>
+
+            {/* Newsletter Subscription */}
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="newsletter"
+                checked={formData.newsletter}
+                onCheckedChange={(checked) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    newsletter: checked as boolean,
+                  }))
+                }
+                className="mt-1 dark:border-gray-600 dark:data-[state=checked]:bg-primary"
+                disabled={isSubmitting}
+              />
+              <Label
+                htmlFor="newsletter"
+                className="font-normal dark:text-gray-400"
+              >
+                Subscribe to newsletter for updates and offers
+              </Label>
+            </div>
           </div>
 
           {/* Submit Button */}
@@ -803,7 +980,7 @@ export default function Register() {
           >
             {isSubmitting ? (
               <>
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent mr-2" />
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
                 Creating Account...
               </>
             ) : (
@@ -830,6 +1007,7 @@ export default function Register() {
               variant="outline"
               size="lg"
               className="w-full flex items-center gap-2 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
+              disabled={isSubmitting}
             >
               <img
                 src="https://www.svgrepo.com/show/475656/google-color.svg"
@@ -844,6 +1022,7 @@ export default function Register() {
               variant="outline"
               size="lg"
               className="w-full flex items-center gap-2 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
+              disabled={isSubmitting}
             >
               <img
                 src="https://www.svgrepo.com/show/475661/github-filled.svg"
@@ -860,6 +1039,7 @@ export default function Register() {
           <Link
             to="/"
             className="text-primary font-medium hover:underline dark:text-primary-400"
+            onClick={(e) => isSubmitting && e.preventDefault()}
           >
             Sign in here
           </Link>
