@@ -79,6 +79,7 @@ export default function Register() {
     email_verified: boolean | null;
     user_id?: string;
   }>({ exists: false, email_verified: null });
+  const [isGoogleLoading, setIsGoogleLoading] = React.useState(false);
 
   // List of disposable/temporary email domains
   const disposableEmailDomains = [
@@ -173,14 +174,15 @@ export default function Register() {
 
       setIsCheckingEmail(true);
       try {
-        const { data: userData, error } = await supabase
+        // First check our custom users table
+        const { data: userData, error: usersError } = await supabase
           .from("users")
           .select("id, email, email_verified")
           .eq("email", normalizedEmail)
           .maybeSingle();
 
-        if (error) {
-          console.error("Database query error:", error);
+        if (usersError) {
+          console.error("Database query error:", usersError);
           const result = { exists: false, email_verified: null };
           emailCheckCache.set(normalizedEmail, {
             exists: false,
@@ -191,9 +193,32 @@ export default function Register() {
           return result;
         }
 
-        const exists = !!userData;
-        const email_verified = userData?.email_verified || false;
-        const user_id = userData?.id;
+        // Check if user exists in auth.users table (for Google users)
+        const { data: authUsers, error: authError } =
+          await supabase.auth.admin.listUsers();
+
+        if (authError) {
+          console.error("Auth users query error:", authError);
+        }
+
+        const existingAuthUser = authUsers?.users?.find(
+          (u) => u.email?.toLowerCase() === normalizedEmail
+        );
+
+        const isGoogleUser = existingAuthUser?.identities?.some(
+          (id) => id.provider === "google"
+        );
+
+        // Determine the final status
+        let exists = !!userData || !!existingAuthUser;
+        let email_verified = userData?.email_verified || false;
+        const user_id = userData?.id || existingAuthUser?.id;
+
+        // If it's a Google user in auth table but not in our users table
+        if (isGoogleUser && !userData) {
+          exists = true;
+          email_verified = true; // Google emails are considered verified
+        }
 
         const result = { exists, email_verified, user_id };
 
@@ -349,6 +374,74 @@ export default function Register() {
       }
     };
   }, []);
+
+  // Handle Google Sign Up - UPDATED
+  const handleGoogleSignUp = async () => {
+    setIsGoogleLoading(true);
+    setErrors({});
+
+    try {
+      // First, check if there are existing users with this email in our custom table
+      const normalizedEmail = formData.email.toLowerCase();
+
+      // Only check if there's an email in the form
+      if (formData.email) {
+        const { exists, email_verified } =
+          await checkEmailWithVerification(normalizedEmail);
+
+        // If user exists in our system, show appropriate message
+        if (exists) {
+          if (email_verified === true) {
+            setErrors({
+              submit:
+                "This email is already registered. Please log in instead.",
+            });
+            setIsGoogleLoading(false);
+            return;
+          } else {
+            // User exists but not verified - offer to resend verification
+            setErrors({
+              submit:
+                "This email is registered but not verified. Please check your email or use the resend verification option above.",
+            });
+            setIsGoogleLoading(false);
+            return;
+          }
+        }
+      }
+
+      // If no email in form or user doesn't exist, proceed with Google OAuth
+      // Store a flag in localStorage to indicate this is a Google sign-up
+      localStorage.setItem("google_signup_flow", "true");
+
+      const siteUrl = window.location.origin;
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${siteUrl}/auth/google-callback`,
+          queryParams: {
+            access_type: "offline",
+            prompt: "consent",
+          },
+        },
+      });
+
+      if (error) {
+        console.error("Google OAuth error:", error);
+        throw new Error(`Google sign up failed: ${error.message}`);
+      }
+      // The user will be redirected to Google for authentication
+      // and then redirected back to the callback URL
+    } catch (error) {
+      console.error("Google sign up error:", error);
+      if (error instanceof Error) {
+        setErrors({ submit: error.message });
+      } else {
+        setErrors({ submit: "Google sign up failed. Please try again." });
+      }
+      setIsGoogleLoading(false);
+    }
+  };
 
   // Validate form
   const validateForm = (): boolean => {
@@ -602,7 +695,7 @@ export default function Register() {
 
   // Handle resend verification for unverified email
   const handleResendVerification = async () => {
-    if (!formData.email || !emailStatus.user_id) return;
+    if (!formData.email) return;
 
     setIsSubmitting(true);
     setErrors({});
@@ -621,14 +714,12 @@ export default function Register() {
       // Store email in localStorage for callback
       if (typeof window !== "undefined") {
         localStorage.setItem("pending_email", formData.email);
-        localStorage.setItem("pending_user_id", emailStatus.user_id);
       }
 
       // Navigate to callback page
       navigate("/auth/callback", {
         state: {
           email: formData.email,
-          userId: emailStatus.user_id,
           message: "Verification email resent! Please check your inbox.",
         },
       });
@@ -637,8 +728,6 @@ export default function Register() {
       setErrors({
         submit: "Failed to resend verification email. Please try again.",
       });
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -1091,14 +1180,19 @@ export default function Register() {
               variant="outline"
               size="lg"
               className="w-full flex items-center gap-2 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
-              disabled={isSubmitting}
+              onClick={handleGoogleSignUp}
+              disabled={isSubmitting || isGoogleLoading}
             >
-              <img
-                src="https://www.svgrepo.com/show/475656/google-color.svg"
-                alt="Google"
-                className="h-5 w-5"
-              />
-              Sign up with Google
+              {isGoogleLoading ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <img
+                  src="https://www.svgrepo.com/show/475656/google-color.svg"
+                  alt="Google"
+                  className="h-5 w-5"
+                />
+              )}
+              {isGoogleLoading ? "Signing in..." : "Sign up with Google"}
             </Button>
 
             <Button
