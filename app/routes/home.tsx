@@ -1,10 +1,7 @@
-export function meta({}: Route.MetaArgs) {
-  return [
-    { title: "New React Router App" },
-    { name: "description", content: "Welcome to React Router!" },
-  ];
-}
+import React from "react";
 
-export default function Home() {
-  return <Welcome />;
-}
+const home = () => {
+  return <div>home</div>;
+};
+
+export default home;
