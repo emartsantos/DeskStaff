@@ -22,23 +22,28 @@ export default function AuthCallback() {
   const [message, setMessage] = useState("");
   const [email, setEmail] = useState("");
 
-  useEffect(() => {
-    // Get email from location state or localStorage
-    const getPendingEmail = () => {
-      if (typeof window !== "undefined") {
-        return localStorage.getItem("pending_email") || "";
-      }
-      return "";
-    };
+  // Function to handle safe localStorage access
+  const getPendingEmail = () => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("pending_email") || "";
+    }
+    return "";
+  };
 
-    // Clear email safely
-    const clearPendingEmail = () => {
-      if (typeof window !== "undefined") {
-        localStorage.removeItem("pending_email");
-      }
-    };
+  // Clear email safely
+  const clearPendingEmail = () => {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("pending_email");
+    }
+  };
+
+  useEffect(() => {
     const handleAuthCallback = async () => {
       try {
+        // Get email from location state or localStorage
+        const pendingEmail = location.state?.email || getPendingEmail();
+        setEmail(pendingEmail);
+
         // Get the hash from URL (if user clicked email link)
         const hash = window.location.hash;
 
@@ -59,7 +64,7 @@ export default function AuthCallback() {
           );
 
           // Clear pending email
-          localStorage.removeItem("pending_email");
+          clearPendingEmail();
 
           // Redirect to login after 3 seconds
           setTimeout(() => {
@@ -104,6 +109,9 @@ export default function AuthCallback() {
       const { error } = await supabase.auth.resend({
         type: "signup",
         email: email,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+        },
       });
 
       if (error) {

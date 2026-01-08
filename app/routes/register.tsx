@@ -497,7 +497,7 @@ export default function Register() {
             full_name: `${formData.firstName.trim()} ${formData.lastName.trim()}`,
             newsletter_subscribed: formData.newsletter,
           },
-          emailRedirectTo: `${siteUrl}/auth/callback`,
+          emailRedirectTo: `${siteUrl}/verification`,
         },
       });
 
@@ -539,8 +539,8 @@ export default function Register() {
         localStorage.setItem("pending_email", formData.email);
       }
 
-      // Redirect to auth/callback
-      navigate("/auth/callback", {
+      // Redirect to verification
+      navigate("/verification", {
         state: {
           email: formData.email,
           message:
