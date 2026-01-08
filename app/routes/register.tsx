@@ -17,6 +17,8 @@ import {
   Loader2,
   UserX,
   ShieldAlert,
+  MailCheck,
+  AlertTriangle,
 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
@@ -39,10 +41,15 @@ interface RegisterFormData {
   newsletter: boolean;
 }
 
-// Cache for checked emails to reduce redundant API calls
+// Cache for checked emails with verification status
 const emailCheckCache = new Map<
   string,
-  { exists: boolean; timestamp: number; isVerified?: boolean }
+  {
+    exists: boolean;
+    timestamp: number;
+    email_verified: boolean;
+    user_id?: string;
+  }
 >();
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
@@ -67,10 +74,11 @@ export default function Register() {
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [isCheckingEmail, setIsCheckingEmail] = React.useState(false);
   const [emailSuggestions, setEmailSuggestions] = React.useState<string[]>([]);
-  const [emailExists, setEmailExists] = React.useState<boolean>(false);
-  const [emailVerificationStatus, setEmailVerificationStatus] = React.useState<
-    "verified" | "unverified" | "none"
-  >("none");
+  const [emailStatus, setEmailStatus] = React.useState<{
+    exists: boolean;
+    email_verified: boolean | null;
+    user_id?: string;
+  }>({ exists: false, email_verified: null });
 
   // List of disposable/temporary email domains
   const disposableEmailDomains = [
@@ -158,104 +166,99 @@ export default function Register() {
     },
   };
 
-  // Helper function to check unverified users
-  const checkUnverifiedUser = async (email: string) => {
-    try {
-      const { data, error } = await supabase
-        .from("users")
-        .select("email, email_verified")
-        .eq("email", email.toLowerCase())
-        .eq("email_verified", false)
-        .maybeSingle();
+  // Check email with verification status
+  const checkEmailWithVerification = React.useCallback(
+    async (email: string) => {
+      const normalizedEmail = email.toLowerCase().trim();
 
-      if (error) {
-        console.error("Error checking unverified user:", error);
-        return null;
+      // Only check if email is valid
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(normalizedEmail)) {
+        setEmailStatus({ exists: false, email_verified: null });
+        return { exists: false, email_verified: null };
       }
 
-      return data;
-    } catch (error) {
-      console.error("Exception checking unverified user:", error);
-      return null;
-    }
-  };
+      // Check cache first
+      const cached = emailCheckCache.get(normalizedEmail);
+      if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+        setEmailStatus({
+          exists: cached.exists,
+          email_verified: cached.email_verified,
+          user_id: cached.user_id,
+        });
+        return {
+          exists: cached.exists,
+          email_verified: cached.email_verified,
+          user_id: cached.user_id,
+        };
+      }
 
-  // Check if email exists in database
-  const checkEmailExists = React.useCallback(async (email: string) => {
-    const normalizedEmail = email.toLowerCase().trim();
+      setIsCheckingEmail(true);
+      try {
+        // Check user in database with email_verified status
+        const { data: userData, error: userError } = await supabase
+          .from("users")
+          .select("id, email, email_verified")
+          .eq("email", normalizedEmail)
+          .maybeSingle();
 
-    // Only check if email is valid
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(normalizedEmail)) {
-      setEmailExists(false);
-      setEmailVerificationStatus("none");
-      return false;
-    }
+        if (userError) {
+          console.error("Database query error:", userError);
+          const result = { exists: false, email_verified: null };
+          emailCheckCache.set(normalizedEmail, {
+            exists: false,
+            email_verified: false,
+            timestamp: Date.now(),
+          });
+          setEmailStatus(result);
+          return result;
+        }
 
-    // Check cache first
-    const cached = emailCheckCache.get(normalizedEmail);
-    if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-      setEmailExists(cached.exists);
-      setEmailVerificationStatus(cached.isVerified ? "verified" : "unverified");
-      return cached.exists;
-    }
+        // Check if user exists
+        const exists = !!userData;
+        const email_verified = userData?.email_verified || false;
+        const user_id = userData?.id;
 
-    setIsCheckingEmail(true);
-    try {
-      // Check both verified and unverified users
-      const { data: userData, error: userError } = await supabase
-        .from("users")
-        .select("email, email_verified")
-        .eq("email", normalizedEmail)
-        .maybeSingle();
+        const result = {
+          exists,
+          email_verified,
+          user_id,
+        };
 
-      if (userError) {
-        console.error("Database query error:", userError);
+        // Update cache
         emailCheckCache.set(normalizedEmail, {
-          exists: false,
+          exists,
+          email_verified,
+          user_id,
           timestamp: Date.now(),
         });
-        setEmailExists(false);
-        setEmailVerificationStatus("none");
-        return false;
+
+        setEmailStatus(result);
+
+        // Clear any existing email errors when checking
+        setErrors((prev) => {
+          const newErrors = { ...prev };
+          delete newErrors.email;
+          return newErrors;
+        });
+
+        return result;
+      } catch (error) {
+        console.error("Error checking email:", error);
+        const result = { exists: false, email_verified: null };
+        emailCheckCache.set(normalizedEmail, {
+          exists: false,
+          email_verified: false,
+          timestamp: Date.now(),
+        });
+        setEmailStatus(result);
+        return result;
+      } finally {
+        setIsCheckingEmail(false);
       }
-
-      // If userData exists, email is already registered
-      const exists = !!userData;
-      const isVerified = userData?.email_verified || false;
-
-      emailCheckCache.set(normalizedEmail, {
-        exists,
-        timestamp: Date.now(),
-        isVerified,
-      });
-
-      setEmailExists(exists);
-      setEmailVerificationStatus(
-        exists ? (isVerified ? "verified" : "unverified") : "none"
-      );
-
-      // Clear any existing email errors when checking
-      setErrors((prev) => {
-        const newErrors = { ...prev };
-        delete newErrors.email;
-        return newErrors;
-      });
-
-      return exists;
-    } catch (error) {
-      console.error("Error checking email:", error);
-      emailCheckCache.set(normalizedEmail, {
-        exists: false,
-        timestamp: Date.now(),
-      });
-      setEmailExists(false);
-      setEmailVerificationStatus("none");
-      return false;
-    } finally {
-      setIsCheckingEmail(false);
-    }
-  }, []);
+    },
+    []
+  );
 
   // Optimized email validation
   const validateEmail = React.useCallback((email: string) => {
@@ -375,10 +378,7 @@ export default function Register() {
 
     // Clear email states when email changes
     if (id === "email") {
-      if (emailExists) {
-        setEmailExists(false);
-        setEmailVerificationStatus("none");
-      }
+      setEmailStatus({ exists: false, email_verified: null });
       // Clear cache for this email
       emailCheckCache.delete(value.toLowerCase());
     }
@@ -423,7 +423,7 @@ export default function Register() {
 
         if (!isDisposable) {
           debouncedEmailCheck.current = setTimeout(() => {
-            checkEmailExists(value);
+            checkEmailWithVerification(value);
           }, 800);
         }
       }
@@ -462,13 +462,13 @@ export default function Register() {
     Object.assign(newErrors, emailErrors);
 
     // Check email existence and verification status
-    if (!emailErrors.email && emailExists) {
-      if (emailVerificationStatus === "verified") {
+    if (!emailErrors.email && emailStatus.exists) {
+      if (emailStatus.email_verified === true) {
         newErrors.email =
           "This email is already registered and verified. Please use a different email or try logging in.";
-      } else if (emailVerificationStatus === "unverified") {
+      } else if (emailStatus.email_verified === false) {
         newErrors.email =
-          "This email is registered but not verified. Please check your email for the verification link or request a new one.";
+          "This email is registered but not verified. Please check your email for the verification link or click below to resend.";
       } else {
         newErrors.email =
           "This email is already registered. Please use a different email or try logging in.";
@@ -509,39 +509,36 @@ export default function Register() {
       return;
     }
 
-    // Double-check email existence before proceeding
+    // Final check for email existence with verification status
     const normalizedEmail = formData.email.toLowerCase();
     try {
-      const { data: userData } = await supabase
-        .from("users")
-        .select("email, email_verified")
-        .eq("email", normalizedEmail)
-        .maybeSingle();
+      const { exists, email_verified, user_id } =
+        await checkEmailWithVerification(normalizedEmail);
 
-      if (userData) {
-        // Update cache
-        emailCheckCache.set(normalizedEmail, {
-          exists: true,
-          timestamp: Date.now(),
-          isVerified: userData.email_verified,
-        });
-        setEmailExists(true);
-        setEmailVerificationStatus(
-          userData.email_verified ? "verified" : "unverified"
-        );
-
-        if (userData.email_verified) {
+      if (exists) {
+        if (email_verified === true) {
           setErrors({
             submit:
               "This email is already registered and verified. Please use a different email or try logging in.",
           });
-        } else {
-          setErrors({
-            submit:
-              "This email is registered but not verified. Please check your email for verification or visit the verification page.",
+          return;
+        } else if (email_verified === false) {
+          // Email exists but not verified - redirect to verification page
+          if (typeof window !== "undefined" && user_id) {
+            localStorage.setItem("pending_email", formData.email);
+            localStorage.setItem("pending_user_id", user_id);
+          }
+
+          navigate("/auth/callback", {
+            state: {
+              email: formData.email,
+              userId: user_id,
+              message:
+                "Your email is registered but not verified. Please verify your email to continue.",
+            },
           });
+          return;
         }
-        return;
       }
     } catch (error) {
       console.error("Final email check error:", error);
@@ -578,9 +575,10 @@ export default function Register() {
           // Update cache
           emailCheckCache.set(normalizedEmail, {
             exists: true,
+            email_verified: null,
             timestamp: Date.now(),
           });
-          setEmailExists(true);
+          setEmailStatus({ exists: true, email_verified: null });
           throw new Error(
             "This email is already registered. Please use a different email or try logging in."
           );
@@ -603,7 +601,7 @@ export default function Register() {
         throw new Error("Registration failed. Please try again.");
       }
 
-      // ========== CRITICAL: INSERT USER INTO USERS TABLE WITH email_verified = false ==========
+      // CRITICAL: Insert user into users table with email_verified = false
       try {
         const { error: insertError } = await supabase.from("users").insert({
           id: authData.user.id,
@@ -622,7 +620,7 @@ export default function Register() {
 
           // If it's a duplicate, try updating instead
           if (insertError.code === "23505") {
-            // Unique violation
+            // Unique violation - update existing record
             const { error: updateError } = await supabase
               .from("users")
               .update({
@@ -630,7 +628,7 @@ export default function Register() {
                 last_name: formData.lastName.trim(),
                 full_name: `${formData.firstName.trim()} ${formData.lastName.trim()}`,
                 newsletter_subscribed: formData.newsletter,
-                email_verified: false, // Ensure it's false
+                email_verified: false, // Ensure it's false for unverified users
                 updated_at: new Date().toISOString(),
               })
               .eq("email", normalizedEmail);
@@ -639,53 +637,54 @@ export default function Register() {
               console.error("Error updating user in users table:", updateError);
             }
           }
+        } else {
+          console.log(
+            "✅ User successfully added to users table with email_verified = false"
+          );
         }
       } catch (dbError) {
         console.error("Database insert/update error:", dbError);
         // Don't throw here - we still want to proceed with registration
       }
-      // ========== END CRITICAL SECTION ==========
 
-      // Verify the user was added to unverified_users
+      // Verify user was added with email_verified = false
       try {
-        const { data: unverifiedUser } = await supabase
+        const { data: userCheck } = await supabase
           .from("users")
-          .select("*")
+          .select("email_verified")
           .eq("email", normalizedEmail)
-          .eq("email_verified", false)
           .maybeSingle();
 
-        if (!unverifiedUser) {
-          console.warn("User was not added to unverified_users");
-          // Attempt to manually fix by updating email_verified to false
-          await supabase
-            .from("users")
-            .update({ email_verified: false })
-            .eq("email", normalizedEmail);
+        if (!userCheck) {
+          console.warn("User was not added to users table");
         } else {
-          console.log("User successfully added to unverified_users");
+          console.log("User verification status:", userCheck.email_verified);
         }
       } catch (verificationError) {
-        console.error(
-          "Error verifying unverified user status:",
-          verificationError
-        );
+        console.error("Error verifying user status:", verificationError);
       }
 
       // Store email in localStorage for post-registration flow
       if (typeof window !== "undefined") {
         localStorage.setItem("pending_email", formData.email);
-        // Also store user ID for reference
         localStorage.setItem("pending_user_id", authData.user.id);
       }
 
-      // Redirect to auth/callback with state
+      // Update cache
+      emailCheckCache.set(normalizedEmail, {
+        exists: true,
+        email_verified: false,
+        user_id: authData.user.id,
+        timestamp: Date.now(),
+      });
+
+      // Redirect to auth/callback
       navigate("/auth/callback", {
         state: {
           email: formData.email,
           userId: authData.user.id,
           message:
-            "Registration successful! Please check your email to verify your account. Your account has been added to unverified users until you verify your email.",
+            "Registration successful! Please check your email to verify your account.",
         },
       });
     } catch (error) {
@@ -701,13 +700,55 @@ export default function Register() {
     }
   };
 
+  // Handle resend verification for unverified email
+  const handleResendVerification = async () => {
+    if (!formData.email || !emailStatus.user_id) return;
+
+    setIsSubmitting(true);
+    setErrors({});
+
+    try {
+      const { error } = await supabase.auth.resend({
+        type: "signup",
+        email: formData.email,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
+
+      if (error) throw error;
+
+      // Store email in localStorage for callback
+      if (typeof window !== "undefined") {
+        localStorage.setItem("pending_email", formData.email);
+        localStorage.setItem("pending_user_id", emailStatus.user_id);
+      }
+
+      // Navigate to callback page
+      navigate("/auth/callback", {
+        state: {
+          email: formData.email,
+          userId: emailStatus.user_id,
+          message: "Verification email resent! Please check your inbox.",
+        },
+      });
+    } catch (error) {
+      console.error("Error resending verification:", error);
+      setErrors({
+        submit: "Failed to resend verification email. Please try again.",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   // Check if form can be submitted
   const canSubmit =
     formData.terms &&
     passwordsMatch &&
     formData.password.length >= 8 &&
     !errors.email &&
-    !emailExists &&
+    !emailStatus.exists &&
     formData.email.includes("@");
 
   return (
@@ -731,6 +772,27 @@ export default function Register() {
           <Alert variant="destructive" className="mb-6">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>{errors.submit}</AlertDescription>
+          </Alert>
+        )}
+
+        {/* Show special alert for unverified email */}
+        {emailStatus.exists && emailStatus.email_verified === false && (
+          <Alert className="mb-6 bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800">
+            <AlertTriangle className="h-4 w-4 text-amber-600" />
+            <AlertDescription className="text-amber-800 dark:text-amber-300">
+              <div className="flex flex-col gap-2">
+                <p>This email is registered but not verified.</p>
+                <Button
+                  onClick={handleResendVerification}
+                  size="sm"
+                  variant="outline"
+                  className="mt-2 border-amber-300 text-amber-700 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-900/30"
+                >
+                  <MailCheck className="h-4 w-4 mr-2" />
+                  Resend Verification Email
+                </Button>
+              </div>
+            </AlertDescription>
           </Alert>
         )}
 
@@ -809,22 +871,29 @@ export default function Register() {
                 {isCheckingEmail && (
                   <Loader2 className="h-3 w-3 animate-spin text-gray-500" />
                 )}
-                {emailExists &&
+                {emailStatus.exists &&
                   !isCheckingEmail &&
                   formData.email.includes("@") && (
                     <div className="flex items-center gap-1 text-xs">
-                      {emailVerificationStatus === "verified" ? (
+                      {emailStatus.email_verified === true ? (
                         <>
                           <UserX className="h-3 w-3 text-red-500" />
                           <span className="text-red-500">
-                            Already registered & verified
+                            ✓ Verified Account
+                          </span>
+                        </>
+                      ) : emailStatus.email_verified === false ? (
+                        <>
+                          <ShieldAlert className="h-3 w-3 text-amber-500" />
+                          <span className="text-amber-500">
+                            ⚠️ Not Verified
                           </span>
                         </>
                       ) : (
                         <>
-                          <ShieldAlert className="h-3 w-3 text-amber-500" />
-                          <span className="text-amber-500">
-                            Registered but not verified
+                          <UserX className="h-3 w-3 text-red-500" />
+                          <span className="text-red-500">
+                            Already Registered
                           </span>
                         </>
                       )}
@@ -839,7 +908,7 @@ export default function Register() {
                 type="email"
                 placeholder="you@example.com"
                 className={`dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400 pr-10 ${
-                  errors.email || emailExists
+                  errors.email || emailStatus.exists
                     ? "border-red-500 dark:border-red-500"
                     : ""
                 }`}
@@ -849,18 +918,18 @@ export default function Register() {
                 required
               />
               <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                {errors.email || emailExists ? (
+                {errors.email || emailStatus.exists ? (
                   <MailWarning className="h-4 w-4 text-red-500" />
                 ) : formData.email.includes("@") &&
                   !errors.email &&
-                  !emailExists ? (
+                  !emailStatus.exists ? (
                   <CheckCircle className="h-4 w-4 text-green-500" />
                 ) : null}
               </div>
             </div>
 
             {/* Email Errors */}
-            {(errors.email || emailExists) && (
+            {(errors.email || emailStatus.exists) && (
               <div className="space-y-1">
                 {emailSuggestions.length > 0 && (
                   <div className="text-xs text-amber-600 dark:text-amber-400">
@@ -870,6 +939,25 @@ export default function Register() {
                         {suggestion}
                       </p>
                     ))}
+                  </div>
+                )}
+                {emailStatus.exists && emailStatus.email_verified !== null && (
+                  <div
+                    className={`text-xs ${emailStatus.email_verified ? "text-red-500" : "text-amber-500"}`}
+                  >
+                    {emailStatus.email_verified ? (
+                      <p className="flex items-center gap-1">
+                        <XCircle className="h-3 w-3" />
+                        Email is already verified. Please use a different email
+                        or login.
+                      </p>
+                    ) : (
+                      <p className="flex items-center gap-1">
+                        <AlertTriangle className="h-3 w-3" />
+                        Email registered but not verified. Click the button
+                        above to resend verification.
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
@@ -896,20 +984,30 @@ export default function Register() {
                     ),
                     label: "Not a disposable/temporary email",
                   },
-                ].map(({ key, met, label, loading, showOnlyIfRegistered }) => {
-                  if (showOnlyIfRegistered && !emailExists) return null;
+                  {
+                    key: "registered",
+                    met:
+                      !emailStatus.exists ||
+                      emailStatus.email_verified === false,
+                    label: emailStatus.exists
+                      ? emailStatus.email_verified === true
+                        ? "❌ Email already verified (use different)"
+                        : "⚠️ Email registered but not verified"
+                      : "Email not already registered",
+                    showOnlyIfRegistered: true,
+                  },
+                ].map(({ key, met, label, showOnlyIfRegistered }) => {
+                  if (showOnlyIfRegistered && !emailStatus.exists) return null;
 
                   return (
                     <div key={key} className="flex items-center gap-2">
-                      {loading ? (
-                        <Loader2 className="h-3 w-3 animate-spin text-gray-500" />
-                      ) : met || !formData.email ? (
+                      {met || !formData.email ? (
                         <CheckCircle className="h-3 w-3 text-green-500" />
                       ) : (
                         <XCircle className="h-3 w-3 text-red-500" />
                       )}
                       <span
-                        className={`text-xs ${met ? "text-green-600 dark:text-green-500" : loading ? "text-gray-500" : "text-red-500 dark:text-red-400"}`}
+                        className={`text-xs ${met ? "text-green-600 dark:text-green-500" : "text-red-500 dark:text-red-400"}`}
                       >
                         {label}
                       </span>
