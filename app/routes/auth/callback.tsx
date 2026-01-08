@@ -13,8 +13,7 @@ import {
   RefreshCw,
   AlertTriangle,
   Shield,
-  ExternalLink,
-  Key,
+  Lock,
 } from "lucide-react";
 
 export default function AuthCallback() {
@@ -27,18 +26,15 @@ export default function AuthCallback() {
     | "error"
     | "unverified"
     | "checking_verification"
-    | "verified_no_redirect"
   >("loading");
   const [message, setMessage] = useState("");
   const [email, setEmail] = useState("");
   const [userId, setUserId] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
-  const [dbVerificationStatus, setDbVerificationStatus] = useState<
-    boolean | null
-  >(null);
-  const [authVerificationStatus, setAuthVerificationStatus] = useState<
-    boolean | null
-  >(null);
+  const [verificationDetails, setVerificationDetails] = useState<{
+    dbVerified: boolean;
+    authVerified: boolean;
+  } | null>(null);
   const MAX_RETRIES = 3;
 
   // Function to handle safe localStorage access
@@ -61,6 +57,29 @@ export default function AuthCallback() {
     if (typeof window !== "undefined") {
       localStorage.removeItem("pending_email");
       localStorage.removeItem("pending_user_id");
+    }
+  };
+
+  // Function to check email_verified status in database ONLY
+  const checkEmailVerifiedInDB = async (
+    userEmail: string
+  ): Promise<boolean> => {
+    try {
+      const { data, error } = await supabase
+        .from("users")
+        .select("email_verified")
+        .eq("email", userEmail.toLowerCase())
+        .maybeSingle();
+
+      if (error) {
+        console.error("Error checking email_verified in DB:", error);
+        return false;
+      }
+
+      return data?.email_verified === true;
+    } catch (error) {
+      console.error("Exception checking email_verified in DB:", error);
+      return false;
     }
   };
 
@@ -90,7 +109,6 @@ export default function AuthCallback() {
 
       // Check if email_verified is true
       const isVerifiedInDB = userData.email_verified === true;
-      setDbVerificationStatus(isVerifiedInDB);
 
       // Also check Supabase auth status for consistency
       const {
@@ -106,17 +124,21 @@ export default function AuthCallback() {
       const isVerifiedInAuth =
         session?.user?.email_confirmed_at !== null ||
         session?.user?.confirmed_at !== null;
-      setAuthVerificationStatus(isVerifiedInAuth);
 
       // User is considered verified only if BOTH systems agree
       const isFullyVerified = isVerifiedInDB && isVerifiedInAuth;
+
+      // Store verification details for UI
+      setVerificationDetails({
+        dbVerified: isVerifiedInDB,
+        authVerified: isVerifiedInAuth,
+      });
 
       return {
         verified: isFullyVerified,
         userId: userData.id,
         dbVerified: isVerifiedInDB,
         authVerified: isVerifiedInAuth,
-        userData: userData,
       };
     } catch (error) {
       console.error("Exception checking verification status:", error);
@@ -142,14 +164,36 @@ export default function AuthCallback() {
         console.error("Error updating user verification in DB:", error);
         return false;
       }
-
-      // Update local state
-      setDbVerificationStatus(isVerified);
       return true;
     } catch (error) {
       console.error("Exception updating verification in DB:", error);
       return false;
     }
+  };
+
+  // CRITICAL: Function to verify user can proceed to login
+  const verifyUserCanLogin = async (userEmail: string): Promise<boolean> => {
+    // Double-check email_verified status in database
+    const isEmailVerifiedInDB = await checkEmailVerifiedInDB(userEmail);
+
+    if (!isEmailVerifiedInDB) {
+      console.log("🚫 User cannot login: email_verified = false in database");
+      return false;
+    }
+
+    // Also check auth status
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const isAuthVerified = session?.user?.email_confirmed_at !== null;
+
+    if (!isAuthVerified) {
+      console.log("🚫 User cannot login: email not confirmed in auth");
+      return false;
+    }
+
+    console.log("✅ User can login: Both DB and Auth verified");
+    return true;
   };
 
   // Function to wait and retry verification check
@@ -159,22 +203,10 @@ export default function AuthCallback() {
     currentRetry: number
   ) => {
     if (currentRetry >= MAX_RETRIES) {
-      const { dbVerified, authVerified } = await checkUserVerificationStatus(
-        userEmail,
-        userId
+      setStatus("unverified");
+      setMessage(
+        `Email verification is taking longer than expected. Please check your email at ${userEmail} and click the verification link. You may need to manually refresh this page after verifying.`
       );
-
-      if (dbVerified === false) {
-        setStatus("unverified");
-        setMessage(
-          `❌ Email not verified. Please check your email at ${userEmail} and click the verification link. You cannot log in until your email is verified.`
-        );
-      } else if (authVerified && !dbVerified) {
-        setStatus("verified_no_redirect");
-        setMessage(
-          `⚠️ Auth verified but database not updated. Please use the "Update Database" button to fix this issue.`
-        );
-      }
       return;
     }
 
@@ -184,7 +216,10 @@ export default function AuthCallback() {
     const { verified, dbVerified, authVerified } =
       await checkUserVerificationStatus(userEmail, userId);
 
-    if (verified) {
+    // CRITICAL: Check if user can actually login
+    const canLogin = await verifyUserCanLogin(userEmail);
+
+    if (verified && canLogin) {
       // Update database if needed
       if (!dbVerified) {
         await updateUserVerificationInDB(userEmail, true);
@@ -216,94 +251,31 @@ export default function AuthCallback() {
     }
   };
 
-  // Function to manually check email verification status
-  const handleCheckEmailVerification = async () => {
-    try {
-      setStatus("checking_verification");
-      setMessage("Checking email verification status...");
+  // Function to handle successful verification and redirect
+  const handleSuccessfulVerification = async (userEmail: string) => {
+    // CRITICAL: Final verification check before allowing login
+    const canLogin = await verifyUserCanLogin(userEmail);
 
-      const { verified, dbVerified, authVerified, error } =
-        await checkUserVerificationStatus(email, userId);
-
-      if (error) {
-        setStatus("error");
-        setMessage(`Error checking verification: ${error}`);
-        return;
-      }
-
-      if (verified) {
-        setStatus("success");
-        setMessage("✅ Email is verified! Your account is ready.");
-        clearPendingData();
-
-        setTimeout(() => {
-          navigate("/login", {
-            state: {
-              message: "Email verified successfully! You can now log in.",
-            },
-          });
-        }, 3000);
-      } else if (dbVerified === false) {
-        // User is NOT verified in database
-        setStatus("unverified");
-        setMessage(
-          `❌ Email NOT verified in database. Please check your email at ${email} and click the verification link. You cannot log in until your email is verified.`
-        );
-      } else if (authVerified && !dbVerified) {
-        setStatus("verified_no_redirect");
-        setMessage(
-          `⚠️ Email verified in auth but not in database. Please use the "Update Database" button to fix this issue before logging in.`
-        );
-      } else {
-        setStatus("pending");
-        setMessage(
-          `⏳ Still waiting for email verification. Please check your email at ${email}.`
-        );
-      }
-    } catch (error) {
-      console.error("Error checking email verification:", error);
-      setStatus("error");
-      setMessage("Failed to check email verification status.");
+    if (!canLogin) {
+      setStatus("unverified");
+      setMessage(
+        `Your email verification is not complete. Please check ${userEmail} and click the verification link. Database shows email_verified = false.`
+      );
+      return;
     }
-  };
 
-  // Function to manually update database verification status
-  const handleUpdateDatabaseVerification = async () => {
-    try {
-      setStatus("loading");
-      setMessage("Updating database verification status...");
-
-      const success = await updateUserVerificationInDB(email, true);
-
-      if (success) {
-        // Check status again
-        await handleCheckEmailVerification();
-      } else {
-        setStatus("error");
-        setMessage("Failed to update database verification status.");
-      }
-    } catch (error) {
-      console.error("Error updating database verification:", error);
-      setStatus("error");
-      setMessage("Failed to update database verification.");
-    }
-  };
-
-  // Function to force redirect to login (for testing/admin use)
-  const handleForceLoginRedirect = () => {
     setStatus("success");
-    setMessage(
-      "⚠️ Force redirecting to login (bypassing verification check)..."
-    );
+    setMessage("Email verified successfully! Your account is now active.");
+    clearPendingData();
 
+    // Redirect to login after 3 seconds
     setTimeout(() => {
       navigate("/login", {
         state: {
-          message: "Redirected to login (verification bypassed)",
-          warning: "Email verification may not be complete",
+          message: "Email verified successfully! You can now log in.",
         },
       });
-    }, 2000);
+    }, 3000);
   };
 
   useEffect(() => {
@@ -315,12 +287,6 @@ export default function AuthCallback() {
 
         setEmail(pendingEmail);
         setUserId(pendingUserId);
-
-        if (!pendingEmail) {
-          setStatus("error");
-          setMessage("No email found. Please try registering again.");
-          return;
-        }
 
         // Get the hash from URL (if user clicked email link)
         const hash = window.location.hash;
@@ -351,7 +317,10 @@ export default function AuthCallback() {
             console.error("Verification check error:", error);
           }
 
-          if (verified) {
+          // CRITICAL: Check if user can actually login
+          const canLogin = await verifyUserCanLogin(pendingEmail);
+
+          if (verified && canLogin) {
             // Update database if needed
             if (!dbVerified) {
               await updateUserVerificationInDB(pendingEmail, true);
@@ -372,23 +341,30 @@ export default function AuthCallback() {
               });
             }, 3000);
           } else if (authVerified && !dbVerified) {
-            // Auth says verified but DB doesn't - DON'T redirect, show special state
-            setStatus("verified_no_redirect");
-            setMessage(
-              "⚠️ Email verified in authentication but NOT in database. Please use the 'Update Database' button to fix this before logging in."
-            );
-          } else if (dbVerified === false) {
-            // User is NOT verified in database - DO NOT REDIRECT
-            setStatus("unverified");
-            setMessage(
-              `❌ Email NOT verified. Please check your email at ${pendingEmail} and click the verification link. You cannot log in until your email is verified.`
-            );
-            setRetryCount(0);
+            // Auth says verified but DB doesn't - update DB first
+            await updateUserVerificationInDB(pendingEmail, true);
 
-            // Start retry mechanism
-            setTimeout(() => {
-              waitAndRetryVerification(pendingEmail, pendingUserId, 0);
-            }, 3000);
+            // CRITICAL: Check again after updating DB
+            const canLoginAfterUpdate = await verifyUserCanLogin(pendingEmail);
+
+            if (canLoginAfterUpdate) {
+              setStatus("success");
+              setMessage("Email verified successfully! Database updated.");
+              clearPendingData();
+
+              setTimeout(() => {
+                navigate("/login", {
+                  state: {
+                    message: "Email verified successfully! You can now log in.",
+                  },
+                });
+              }, 3000);
+            } else {
+              setStatus("unverified");
+              setMessage(
+                `Database updated but email verification not complete. Please check ${pendingEmail}.`
+              );
+            }
           } else {
             // Not verified yet, start retry mechanism
             setStatus("checking_verification");
@@ -406,7 +382,10 @@ export default function AuthCallback() {
           const { verified, dbVerified, authVerified } =
             await checkUserVerificationStatus(pendingEmail, pendingUserId);
 
-          if (verified) {
+          // CRITICAL: Check if user can actually login
+          const canLogin = await verifyUserCanLogin(pendingEmail);
+
+          if (verified && canLogin) {
             setStatus("success");
             setMessage("Your email is already verified! You can now log in.");
             clearPendingData();
@@ -419,16 +398,35 @@ export default function AuthCallback() {
               });
             }, 3000);
           } else if (authVerified && !dbVerified) {
-            // Auth says verified but DB doesn't - DON'T redirect
-            setStatus("verified_no_redirect");
-            setMessage(
-              "⚠️ Email verified in authentication but NOT in database. Please use the 'Update Database' button to fix this before logging in."
-            );
-          } else if (dbVerified === false) {
-            // User is NOT verified - DO NOT REDIRECT
+            // Auth says verified but DB doesn't - update DB first
+            await updateUserVerificationInDB(pendingEmail, true);
+
+            // CRITICAL: Check again after updating DB
+            const canLoginAfterUpdate = await verifyUserCanLogin(pendingEmail);
+
+            if (canLoginAfterUpdate) {
+              setStatus("success");
+              setMessage("Email verification completed! Database updated.");
+              clearPendingData();
+
+              setTimeout(() => {
+                navigate("/login", {
+                  state: {
+                    message: "Email verified successfully! You can now log in.",
+                  },
+                });
+              }, 3000);
+            } else {
+              setStatus("unverified");
+              setMessage(
+                `Database updated but email verification not complete. Please check ${pendingEmail}.`
+              );
+            }
+          } else {
+            // User is not verified - DO NOT REDIRECT TO LOGIN
             setStatus("pending");
             setMessage(
-              `Registration completed! We've sent a verification email to ${pendingEmail}. Please check your inbox and click the link to activate your account. You cannot log in until your email is verified.`
+              `Registration completed! We've sent a verification email to ${pendingEmail}. Please check your inbox and click the link to activate your account.`
             );
 
             // Start periodic verification checks
@@ -436,8 +434,16 @@ export default function AuthCallback() {
               const { verified, dbVerified, authVerified } =
                 await checkUserVerificationStatus(pendingEmail, pendingUserId);
 
-              if (verified) {
+              // CRITICAL: Check if user can actually login
+              const canLogin = await verifyUserCanLogin(pendingEmail);
+
+              if ((verified || (authVerified && !dbVerified)) && canLogin) {
                 clearInterval(checkInterval);
+
+                if (authVerified && !dbVerified) {
+                  await updateUserVerificationInDB(pendingEmail, true);
+                }
+
                 setStatus("success");
                 setMessage("Email verified! Your account is now active.");
                 clearPendingData();
@@ -450,12 +456,6 @@ export default function AuthCallback() {
                     },
                   });
                 }, 3000);
-              } else if (authVerified && !dbVerified) {
-                clearInterval(checkInterval);
-                setStatus("verified_no_redirect");
-                setMessage(
-                  "⚠️ Email verified in authentication but NOT in database. Please use the 'Update Database' button."
-                );
               }
             }, 5000); // Check every 5 seconds
 
@@ -472,11 +472,6 @@ export default function AuthCallback() {
               },
               5 * 60 * 1000
             );
-          } else {
-            setStatus("pending");
-            setMessage(
-              `Registration completed! Please check your email at ${pendingEmail} for verification.`
-            );
           }
         }
       } catch (error) {
@@ -492,7 +487,7 @@ export default function AuthCallback() {
     }, 1000);
 
     return () => clearTimeout(timer);
-  }, [navigate, location]);
+  }, [navigate, location, status]);
 
   // Function to resend verification email
   const handleResendVerification = async () => {
@@ -525,14 +520,7 @@ export default function AuthCallback() {
     }
   };
 
-  // Function to go to verification page
-  const handleGoToVerification = () => {
-    navigate("/verification", {
-      state: { email, userId },
-    });
-  };
-
-  // Function to check verification status (main check)
+  // Function to manually check verification status
   const handleCheckVerification = async () => {
     try {
       setStatus("checking_verification");
@@ -541,7 +529,10 @@ export default function AuthCallback() {
       const { verified, dbVerified, authVerified } =
         await checkUserVerificationStatus(email, userId);
 
-      if (verified) {
+      // CRITICAL: Check if user can actually login
+      const canLogin = await verifyUserCanLogin(email);
+
+      if (verified && canLogin) {
         setStatus("success");
         setMessage("✅ Email verified! Your account is now active.");
         clearPendingData();
@@ -554,19 +545,34 @@ export default function AuthCallback() {
           });
         }, 3000);
       } else if (authVerified && !dbVerified) {
-        setStatus("verified_no_redirect");
-        setMessage(
-          "⚠️ Email verified in authentication but NOT in database. Please use the 'Update Database' button to fix this before logging in."
-        );
-      } else if (dbVerified === false) {
+        // Update DB first
+        await updateUserVerificationInDB(email, true);
+
+        // CRITICAL: Check again after updating DB
+        const canLoginAfterUpdate = await verifyUserCanLogin(email);
+
+        if (canLoginAfterUpdate) {
+          setStatus("success");
+          setMessage("✅ Email verification completed! Database updated.");
+          clearPendingData();
+
+          setTimeout(() => {
+            navigate("/login", {
+              state: {
+                message: "Email verified successfully! You can now log in.",
+              },
+            });
+          }, 3000);
+        } else {
+          setStatus("unverified");
+          setMessage(
+            `❌ Database updated but email verification not complete. Please check ${email}.`
+          );
+        }
+      } else {
         setStatus("unverified");
         setMessage(
-          `❌ Email NOT verified in database. Please check your email at ${email} and click the verification link. You cannot log in until your email is verified.`
-        );
-      } else {
-        setStatus("pending");
-        setMessage(
-          `⏳ Still waiting for verification. Please check your email at ${email}.`
+          `❌ Email not verified yet. Please check your email at ${email} and click the verification link.`
         );
       }
     } catch (error) {
@@ -574,6 +580,13 @@ export default function AuthCallback() {
       setStatus("error");
       setMessage("Failed to check verification status.");
     }
+  };
+
+  // Function to go to verification page
+  const handleGoToVerification = () => {
+    navigate("/verification", {
+      state: { email, userId },
+    });
   };
 
   return (
@@ -621,6 +634,33 @@ export default function AuthCallback() {
                       Checking database status...
                     </span>
                   </div>
+                  {verificationDetails && (
+                    <div className="mt-4 p-3 bg-gray-100 dark:bg-gray-800 rounded-md">
+                      <p className="text-xs text-gray-600 dark:text-gray-400">
+                        Status Check:
+                      </p>
+                      <div className="flex justify-between mt-1">
+                        <span className="text-xs">Database:</span>
+                        <span
+                          className={`text-xs font-medium ${verificationDetails.dbVerified ? "text-green-600" : "text-red-600"}`}
+                        >
+                          {verificationDetails.dbVerified
+                            ? "✓ Verified"
+                            : "✗ Not Verified"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between mt-1">
+                        <span className="text-xs">Auth System:</span>
+                        <span
+                          className={`text-xs font-medium ${verificationDetails.authVerified ? "text-green-600" : "text-red-600"}`}
+                        >
+                          {verificationDetails.authVerified
+                            ? "✓ Verified"
+                            : "✗ Not Verified"}
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </>
@@ -651,8 +691,14 @@ export default function AuthCallback() {
                     </span>
                   </div>
                   <div className="flex items-center justify-center gap-2 text-sm">
-                    <AlertTriangle className="h-4 w-4 text-amber-500" />
+                    <Loader2 className="h-4 w-4 animate-spin text-amber-500" />
                     <span className="text-amber-600 dark:text-amber-400">
+                      Waiting for email verification
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-center gap-2 text-sm">
+                    <Lock className="h-4 w-4 text-red-500" />
+                    <span className="text-red-600 dark:text-red-400">
                       Login disabled until email is verified
                     </span>
                   </div>
@@ -661,12 +707,12 @@ export default function AuthCallback() {
 
               <div className="space-y-4 w-full">
                 <Button
-                  onClick={handleCheckEmailVerification}
+                  onClick={handleCheckVerification}
                   variant="outline"
                   className="w-full"
                 >
-                  <Key className="h-4 w-4 mr-2" />
-                  Check Email Verification Status
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Check Verification Status
                 </Button>
 
                 <Button
@@ -679,7 +725,6 @@ export default function AuthCallback() {
                 </Button>
 
                 <Button onClick={handleGoToVerification} className="w-full">
-                  <ExternalLink className="h-4 w-4 mr-2" />
                   Go to Verification Page
                 </Button>
               </div>
@@ -688,32 +733,32 @@ export default function AuthCallback() {
 
           {status === "unverified" && (
             <>
-              <div className="h-20 w-20 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
-                <AlertTriangle className="h-10 w-10 text-red-600 dark:text-red-400" />
+              <div className="h-20 w-20 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                <AlertTriangle className="h-10 w-10 text-amber-600 dark:text-amber-400" />
               </div>
               <div>
                 <h2 className="text-2xl font-bold dark:text-white">
-                  Email NOT Verified ❌
+                  Verification Required
                 </h2>
                 <p className="text-muted-foreground mt-4">{message}</p>
 
                 <div className="mt-6 space-y-3">
                   <div className="flex items-center justify-center gap-2 text-sm">
-                    <XCircle className="h-4 w-4 text-red-500" />
-                    <span className="text-red-600 dark:text-red-400">
-                      Email verification required
+                    <AlertTriangle className="h-4 w-4 text-amber-500" />
+                    <span className="text-amber-600 dark:text-amber-400">
+                      Email not verified yet
                     </span>
                   </div>
                   <div className="flex items-center justify-center gap-2 text-sm">
                     <Shield className="h-4 w-4 text-red-500" />
                     <span className="text-red-600 dark:text-red-400">
-                      Login access blocked
+                      Cannot log in until email is verified
                     </span>
                   </div>
                   <div className="flex items-center justify-center gap-2 text-sm">
-                    <Mail className="h-4 w-4 text-blue-500" />
-                    <span className="text-blue-600 dark:text-blue-400">
-                      Email: {email}
+                    <Lock className="h-4 w-4 text-red-500" />
+                    <span className="text-red-600 dark:text-red-400">
+                      Database check: email_verified = false
                     </span>
                   </div>
                 </div>
@@ -721,12 +766,12 @@ export default function AuthCallback() {
 
               <div className="space-y-4 w-full">
                 <Button
-                  onClick={handleCheckEmailVerification}
+                  onClick={handleCheckVerification}
                   variant="outline"
                   className="w-full"
                 >
-                  <Key className="h-4 w-4 mr-2" />
-                  Re-check Email Verification
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Check Verification Status
                 </Button>
 
                 <Button onClick={handleResendVerification} className="w-full">
@@ -739,71 +784,7 @@ export default function AuthCallback() {
                   variant="secondary"
                   className="w-full"
                 >
-                  <ExternalLink className="h-4 w-4 mr-2" />
                   Go to Verification Page
-                </Button>
-              </div>
-            </>
-          )}
-
-          {status === "verified_no_redirect" && (
-            <>
-              <div className="h-20 w-20 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
-                <AlertTriangle className="h-10 w-10 text-amber-600 dark:text-amber-400" />
-              </div>
-              <div>
-                <h2 className="text-2xl font-bold dark:text-white">
-                  Database Sync Required ⚠️
-                </h2>
-                <p className="text-muted-foreground mt-4">{message}</p>
-
-                <div className="mt-6 space-y-3">
-                  <div className="flex items-center justify-center gap-2 text-sm">
-                    <CheckCircle className="h-4 w-4 text-green-500" />
-                    <span className="text-green-600 dark:text-green-400">
-                      Email verified in authentication
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-center gap-2 text-sm">
-                    <XCircle className="h-4 w-4 text-red-500" />
-                    <span className="text-red-600 dark:text-red-400">
-                      Database not updated
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-center gap-2 text-sm">
-                    <Shield className="h-4 w-4 text-amber-500" />
-                    <span className="text-amber-600 dark:text-amber-400">
-                      Login requires database sync
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-4 w-full">
-                <Button
-                  onClick={handleUpdateDatabaseVerification}
-                  className="w-full"
-                >
-                  <CheckCircle className="h-4 w-4 mr-2" />
-                  Update Database Verification
-                </Button>
-
-                <Button
-                  onClick={handleCheckEmailVerification}
-                  variant="outline"
-                  className="w-full"
-                >
-                  <Key className="h-4 w-4 mr-2" />
-                  Check Status Again
-                </Button>
-
-                <Button
-                  onClick={handleForceLoginRedirect}
-                  variant="secondary"
-                  className="w-full"
-                >
-                  <ExternalLink className="h-4 w-4 mr-2" />
-                  Force Login Redirect (Admin)
                 </Button>
               </div>
             </>
@@ -829,7 +810,7 @@ export default function AuthCallback() {
                   <div className="flex items-center justify-center gap-2 text-sm">
                     <CheckCircle className="h-4 w-4 text-green-500" />
                     <span className="text-green-600 dark:text-green-400">
-                      Database updated
+                      Database: email_verified = true
                     </span>
                   </div>
                   <div className="flex items-center justify-center gap-2 text-sm">
@@ -864,12 +845,9 @@ export default function AuthCallback() {
                 <p className="text-muted-foreground mt-2">{message}</p>
               </div>
               <div className="flex flex-col gap-3 w-full">
-                <Button
-                  onClick={handleCheckEmailVerification}
-                  variant="outline"
-                >
-                  <Key className="h-4 w-4 mr-2" />
-                  Check Email Verification
+                <Button onClick={handleCheckVerification} variant="outline">
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Check Status Again
                 </Button>
                 <Button variant="secondary" onClick={handleResendVerification}>
                   <Mail className="h-4 w-4 mr-2" />
