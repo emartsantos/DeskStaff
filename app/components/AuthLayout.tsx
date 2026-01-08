@@ -50,7 +50,7 @@ export default function AuthLayout({
             <img
               src={illustrationSrc}
               alt={illustrationAlt}
-              className="h-[520px] w-full object-cover transition-opacity duration-500"
+              className="h-full w-full object-cover transition-opacity duration-500"
             />
           </div>
         </div>
