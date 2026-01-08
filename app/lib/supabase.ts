@@ -12,8 +12,6 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: true,
-    // Remove the storage property - Supabase will handle it automatically
-    // storage: localStorage,
     flowType: "pkce",
   },
 });

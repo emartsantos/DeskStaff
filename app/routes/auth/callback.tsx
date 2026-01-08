@@ -1,251 +1,268 @@
+import * as React from "react";
 import { useEffect, useState } from "react";
-import { useSearchParams, useNavigate } from "react-router";
+import { useNavigate, useLocation } from "react-router";
+import { supabase } from "@/lib/supabase";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import {
+  Loader2,
+  CheckCircle,
+  XCircle,
+  MailCheck,
+  Mail,
+  RefreshCw,
+} from "lucide-react";
 
-interface UserVerificationStatus {
-  id: string;
-  email_verified: boolean;
-  verified_at: string | null;
-}
-
-// Mock API function - replace with your actual API call
-async function checkEmailVerification(
-  token?: string
-): Promise<UserVerificationStatus> {
-  // This is where you'd make an actual API call to your backend
-  // Example with actual API call:
-  /*
-  const response = await fetch(`/api/auth/verify-email?token=${token}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  });
-  
-  if (!response.ok) {
-    throw new Error('Verification failed');
-  }
-  
-  return response.json();
-  */
-
-  // Mock implementation
-  return new Promise((resolve, reject) => {
-    setTimeout(() => {
-      if (token && token.length > 10) {
-        resolve({
-          id: "mock-id",
-          email_verified: true,
-          verified_at: new Date().toISOString(),
-        });
-      } else {
-        reject(new Error("Invalid token"));
-      }
-    }, 1000);
-  });
-}
-
-export default function EmailVerificationCallback() {
-  const [searchParams] = useSearchParams();
+export default function AuthCallback() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [status, setStatus] = useState<
-    "loading" | "success" | "error" | "already_verified"
+    "loading" | "success" | "pending" | "error"
   >("loading");
-  const [message, setMessage] = useState<string>("");
+  const [message, setMessage] = useState("");
+  const [email, setEmail] = useState("");
 
   useEffect(() => {
-    const verifyEmail = async () => {
+    // Get email from location state or localStorage
+    const getPendingEmail = () => {
+      if (typeof window !== "undefined") {
+        return localStorage.getItem("pending_email") || "";
+      }
+      return "";
+    };
+
+    // Clear email safely
+    const clearPendingEmail = () => {
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("pending_email");
+      }
+    };
+    const handleAuthCallback = async () => {
       try {
-        const token = searchParams.get("token");
+        // Get the hash from URL (if user clicked email link)
+        const hash = window.location.hash;
 
-        if (!token) {
-          setStatus("error");
-          setMessage("Verification token is missing");
-          return;
-        }
+        if (hash.includes("type=signup")) {
+          // User clicked email verification link
+          const { error } = await supabase.auth.getSession();
 
-        // Call your API to verify the email
-        const result = await checkEmailVerification(token);
+          if (error) {
+            console.error("Session error after email verification:", error);
+            setStatus("error");
+            setMessage("Email verification failed. Please try again.");
+            return;
+          }
 
-        if (result.email_verified) {
           setStatus("success");
-          setMessage("Email verified successfully!");
+          setMessage(
+            "Email verified successfully! Your account is now active."
+          );
 
-          // Redirect to dashboard after a delay
+          // Clear pending email
+          localStorage.removeItem("pending_email");
+
+          // Redirect to login after 3 seconds
           setTimeout(() => {
-            navigate("/dashboard", { replace: true });
+            navigate("/login", {
+              state: {
+                message: "Email verified successfully! You can now log in.",
+              },
+            });
           }, 3000);
+        } else {
+          // User came from registration page (not from email link)
+          setStatus("pending");
+          setMessage(
+            `Registration completed! We've sent a verification email to ${pendingEmail}. Please check your inbox and click the link to activate your account.`
+          );
+
+          // Redirect to login after 10 seconds
+          setTimeout(() => {
+            navigate("/login");
+          }, 10000);
         }
       } catch (error) {
-        console.error("Verification error:", error);
-
-        // Check if this is a "already verified" error from your backend
-        // Adjust this based on your actual API error response
-        const errorMessage =
-          error instanceof Error ? error.message : "Verification failed";
-
-        if (
-          errorMessage.includes("already verified") ||
-          errorMessage.includes("already_verified")
-        ) {
-          setStatus("already_verified");
-          setMessage("Email is already verified");
-        } else {
-          setStatus("error");
-          setMessage(errorMessage);
-        }
+        console.error("Auth callback error:", error);
+        setStatus("error");
+        setMessage("Something went wrong. Please try registering again.");
       }
     };
 
-    verifyEmail();
-  }, [searchParams, navigate]);
+    // Small delay to ensure Supabase has processed everything
+    const timer = setTimeout(() => {
+      handleAuthCallback();
+    }, 1000);
 
+    return () => clearTimeout(timer);
+  }, [navigate, location]);
+
+  // Function to resend verification email
   const handleResendVerification = async () => {
     try {
-      // Call API to resend verification email
-      // Example:
-      // await fetch('/api/auth/resend-verification', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({ email: userEmail }),
-      // });
+      if (!email) return;
 
+      const { error } = await supabase.auth.resend({
+        type: "signup",
+        email: email,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      setStatus("pending");
       setMessage(
-        "Verification email has been resent. Please check your inbox."
+        `Verification email resent to ${email}. Please check your inbox.`
       );
     } catch (error) {
+      console.error("Error resending verification:", error);
+      setStatus("error");
       setMessage("Failed to resend verification email. Please try again.");
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <div className="max-w-md w-full space-y-8">
-        <div className="text-center">
-          <h1 className="text-3xl font-bold text-gray-900">
-            Email Verification
-          </h1>
-        </div>
-
-        <div className="bg-white p-8 rounded-lg shadow">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 px-4">
+      <Card className="w-full max-w-md p-8 shadow-xl">
+        <div className="flex flex-col items-center justify-center space-y-6 text-center">
           {status === "loading" && (
-            <div className="text-center">
-              <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
-              <p className="mt-4 text-gray-600">
-                Verifying your email address...
-              </p>
-            </div>
+            <>
+              <div className="relative">
+                <div className="h-20 w-20 rounded-full border-4 border-primary/20"></div>
+                <Loader2 className="h-20 w-20 absolute inset-0 m-auto animate-spin text-primary" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold dark:text-white">
+                  Processing...
+                </h2>
+                <p className="text-muted-foreground mt-2">
+                  Completing your registration. Please wait.
+                </p>
+              </div>
+            </>
+          )}
+
+          {status === "pending" && (
+            <>
+              <div className="h-20 w-20 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                <Mail className="h-10 w-10 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold dark:text-white">
+                  Check Your Email! 📧
+                </h2>
+                <p className="text-muted-foreground mt-4">{message}</p>
+
+                <div className="mt-6 space-y-3">
+                  <div className="flex items-center justify-center gap-2 text-sm">
+                    <CheckCircle className="h-4 w-4 text-green-500" />
+                    <span className="text-green-600 dark:text-green-400">
+                      Account created successfully
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-center gap-2 text-sm">
+                    <Mail className="h-4 w-4 text-blue-500" />
+                    <span className="text-blue-600 dark:text-blue-400">
+                      Verification email sent to {email}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-center gap-2 text-sm">
+                    <Loader2 className="h-4 w-4 animate-spin text-amber-500" />
+                    <span className="text-amber-600 dark:text-amber-400">
+                      Waiting for email verification
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4 w-full">
+                <Button
+                  onClick={handleResendVerification}
+                  variant="outline"
+                  className="w-full"
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Resend Verification Email
+                </Button>
+
+                <Button
+                  onClick={() => navigate("/login")}
+                  className="w-full"
+                  variant="secondary"
+                >
+                  Go to Login
+                </Button>
+              </div>
+            </>
           )}
 
           {status === "success" && (
-            <div className="text-center">
-              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100">
-                <svg
-                  className="h-6 w-6 text-green-600"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
+            <>
+              <div className="h-20 w-20 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                <MailCheck className="h-10 w-10 text-green-600 dark:text-green-400" />
               </div>
-              <h3 className="mt-4 text-lg font-medium text-gray-900">
-                Success!
-              </h3>
-              <p className="mt-2 text-gray-600">{message}</p>
-              <p className="mt-2 text-sm text-gray-500">
-                You will be redirected shortly...
-              </p>
-              <button
-                onClick={() => navigate("/dashboard", { replace: true })}
-                className="mt-6 w-full py-2 px-4 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
-              >
-                Go to Dashboard
-              </button>
-            </div>
-          )}
-
-          {status === "already_verified" && (
-            <div className="text-center">
-              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-blue-100">
-                <svg
-                  className="h-6 w-6 text-blue-600"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
+              <div>
+                <h2 className="text-2xl font-bold dark:text-white">
+                  Email Verified! ✅
+                </h2>
+                <p className="text-muted-foreground mt-2">{message}</p>
+                <div className="mt-6 space-y-3">
+                  <div className="flex items-center justify-center gap-2 text-sm">
+                    <CheckCircle className="h-4 w-4 text-green-500" />
+                    <span className="text-green-600 dark:text-green-400">
+                      Account activated successfully
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-center gap-2 text-sm">
+                    <CheckCircle className="h-4 w-4 text-green-500" />
+                    <span className="text-green-600 dark:text-green-400">
+                      You can now log in
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-center gap-2 text-sm">
+                    <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                    <span className="text-blue-600 dark:text-blue-400">
+                      Redirecting to login...
+                    </span>
+                  </div>
+                </div>
               </div>
-              <h3 className="mt-4 text-lg font-medium text-gray-900">
-                Already Verified
-              </h3>
-              <p className="mt-2 text-gray-600">{message}</p>
-              <div className="mt-6 space-y-3">
-                <button
-                  onClick={() => navigate("/dashboard", { replace: true })}
-                  className="w-full py-2 px-4 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
-                >
-                  Go to Dashboard
-                </button>
-                <button
-                  onClick={() => navigate("/login", { replace: true })}
-                  className="w-full py-2 px-4 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition"
-                >
-                  Sign In
-                </button>
-              </div>
-            </div>
+              <Button onClick={() => navigate("/login")} className="mt-6">
+                Go to Login Now
+              </Button>
+            </>
           )}
 
           {status === "error" && (
-            <div className="text-center">
-              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100">
-                <svg
-                  className="h-6 w-6 text-red-600"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
+            <>
+              <div className="h-20 w-20 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                <XCircle className="h-10 w-10 text-red-600 dark:text-red-400" />
               </div>
-              <h3 className="mt-4 text-lg font-medium text-gray-900">
-                Verification Failed
-              </h3>
-              <p className="mt-2 text-gray-600">{message}</p>
-              <div className="mt-6 space-y-3">
-                <button
-                  onClick={handleResendVerification}
-                  className="w-full py-2 px-4 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
-                >
-                  Resend Verification Email
-                </button>
-                <button
-                  onClick={() => navigate("/login", { replace: true })}
-                  className="w-full py-2 px-4 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition"
-                >
-                  Return to Login
-                </button>
+              <div>
+                <h2 className="text-2xl font-bold dark:text-white">
+                  Oops! Something went wrong
+                </h2>
+                <p className="text-muted-foreground mt-2">{message}</p>
               </div>
-            </div>
+              <div className="flex flex-col gap-3 w-full">
+                <Button variant="outline" onClick={() => navigate("/register")}>
+                  Try Registration Again
+                </Button>
+                <Button onClick={() => navigate("/")}>Go Home</Button>
+                {email && (
+                  <Button
+                    variant="secondary"
+                    onClick={handleResendVerification}
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Resend Verification Email
+                  </Button>
+                )}
+              </div>
+            </>
           )}
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

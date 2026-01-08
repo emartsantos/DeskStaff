@@ -497,7 +497,7 @@ export default function Register() {
             full_name: `${formData.firstName.trim()} ${formData.lastName.trim()}`,
             newsletter_subscribed: formData.newsletter,
           },
-          emailRedirectTo: `${siteUrl}/VerifyEmailRequired`,
+          emailRedirectTo: `${siteUrl}/auth/callback`,
         },
       });
 
@@ -568,6 +568,53 @@ export default function Register() {
     !errors.email &&
     !emailExists &&
     formData.email.includes("@");
+
+  // Email domain info
+  const getEmailDomainInfo = () => {
+    const domain = formData.email.split("@")[1];
+    if (!domain) return null;
+
+    const domainInfo: Record<
+      string,
+      { icon: React.ReactNode; message: string; color: string }
+    > = {
+      "gmail.com": {
+        icon: <span className="text-xs">📧</span>,
+        message: "Gmail",
+        color: "text-red-500",
+      },
+      "yahoo.com": {
+        icon: <span className="text-xs">🌈</span>,
+        message: "Yahoo Mail",
+        color: "text-purple-500",
+      },
+      "outlook.com": {
+        icon: <span className="text-xs">📨</span>,
+        message: "Outlook",
+        color: "text-blue-500",
+      },
+      "hotmail.com": {
+        icon: <span className="text-xs">🔥</span>,
+        message: "Hotmail",
+        color: "text-orange-500",
+      },
+      "icloud.com": {
+        icon: <span className="text-xs">☁️</span>,
+        message: "iCloud",
+        color: "text-gray-500",
+      },
+    };
+
+    return (
+      domainInfo[domain.toLowerCase()] || {
+        icon: <span className="text-xs">📧</span>,
+        message: `@${domain}`,
+        color: "text-gray-500",
+      }
+    );
+  };
+
+  const emailDomainInfo = getEmailDomainInfo();
 
   return (
     <AuthLayout
@@ -665,6 +712,16 @@ export default function Register() {
                 </TooltipProvider>
               </Label>
               <div className="flex items-center gap-2">
+                {emailDomainInfo &&
+                  formData.email.includes("@") &&
+                  !errors.email && (
+                    <div
+                      className={`text-xs font-medium flex items-center gap-1 ${emailDomainInfo.color}`}
+                    >
+                      {emailDomainInfo.icon}
+                      <span>{emailDomainInfo.message}</span>
+                    </div>
+                  )}
                 {isCheckingEmail && (
                   <Loader2 className="h-3 w-3 animate-spin text-gray-500" />
                 )}
@@ -705,6 +762,28 @@ export default function Register() {
               </div>
             </div>
 
+            {/* Email Errors */}
+            {(errors.email || emailExists) && (
+              <div className="space-y-1">
+                <p className="text-xs text-red-500 flex items-center gap-1">
+                  <XCircle className="h-3 w-3" />
+                  {emailExists
+                    ? "This email is already registered. Please use a different email or try logging in."
+                    : errors.email}
+                </p>
+                {emailSuggestions.length > 0 && (
+                  <div className="text-xs text-amber-600 dark:text-amber-400">
+                    {emailSuggestions.map((suggestion, index) => (
+                      <p key={index} className="flex items-center gap-1">
+                        <AlertCircle className="h-3 w-3" />
+                        {suggestion}
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Email Requirements */}
             <div className="space-y-1 mt-2">
               <p className="text-xs font-medium dark:text-gray-400">
@@ -725,6 +804,15 @@ export default function Register() {
                         .includes(domain.toLowerCase())
                     ),
                     label: "Not a disposable/temporary email",
+                  },
+                  {
+                    key: "available",
+                    met:
+                      !emailExists &&
+                      !isCheckingEmail &&
+                      formData.email.includes("@"),
+                    label: "Email not already registered",
+                    loading: isCheckingEmail,
                   },
                 ].map(({ key, met, label, loading }) => (
                   <div key={key} className="flex items-center gap-2">
