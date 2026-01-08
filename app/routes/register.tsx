@@ -100,15 +100,6 @@ export default function Register() {
     "tempemail.net",
   ];
 
-  // Common email typos and suggestions
-  const commonEmailDomains = [
-    "gmail.com",
-    "yahoo.com",
-    "outlook.com",
-    "hotmail.com",
-    "icloud.com",
-  ];
-
   // Password strength calculation
   const calculatePasswordStrength = (password: string): PasswordStrength => {
     let score = 0;
@@ -148,31 +139,18 @@ export default function Register() {
 
   // Strength indicators
   const strengthIndicators = {
-    weak: { color: "bg-red-500", text: "Weak", description: "Easy to crack" },
-    medium: {
-      color: "bg-yellow-500",
-      text: "Medium",
-      description: "Could be stronger",
-    },
-    strong: {
-      color: "bg-green-500",
-      text: "Strong",
-      description: "Good password",
-    },
-    "very-strong": {
-      color: "bg-emerald-600",
-      text: "Very Strong",
-      description: "Excellent password",
-    },
+    weak: { color: "bg-red-500", text: "Weak" },
+    medium: { color: "bg-yellow-500", text: "Medium" },
+    strong: { color: "bg-green-500", text: "Strong" },
+    "very-strong": { color: "bg-emerald-600", text: "Very Strong" },
   };
 
   // Check email with verification status
   const checkEmailWithVerification = React.useCallback(
     async (email: string) => {
       const normalizedEmail = email.toLowerCase().trim();
-
-      // Only check if email is valid
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
       if (!emailRegex.test(normalizedEmail)) {
         setEmailStatus({ exists: false, email_verified: null });
         return { exists: false, email_verified: null };
@@ -195,15 +173,14 @@ export default function Register() {
 
       setIsCheckingEmail(true);
       try {
-        // Check user in database with email_verified status
-        const { data: userData, error: userError } = await supabase
+        const { data: userData, error } = await supabase
           .from("users")
           .select("id, email, email_verified")
           .eq("email", normalizedEmail)
           .maybeSingle();
 
-        if (userError) {
-          console.error("Database query error:", userError);
+        if (error) {
+          console.error("Database query error:", error);
           const result = { exists: false, email_verified: null };
           emailCheckCache.set(normalizedEmail, {
             exists: false,
@@ -214,16 +191,11 @@ export default function Register() {
           return result;
         }
 
-        // Check if user exists
         const exists = !!userData;
         const email_verified = userData?.email_verified || false;
         const user_id = userData?.id;
 
-        const result = {
-          exists,
-          email_verified,
-          user_id,
-        };
+        const result = { exists, email_verified, user_id };
 
         // Update cache
         emailCheckCache.set(normalizedEmail, {
@@ -235,7 +207,7 @@ export default function Register() {
 
         setEmailStatus(result);
 
-        // Clear any existing email errors when checking
+        // Clear any existing email errors
         setErrors((prev) => {
           const newErrors = { ...prev };
           delete newErrors.email;
@@ -260,88 +232,36 @@ export default function Register() {
     []
   );
 
-  // Optimized email validation
-  const validateEmail = React.useCallback((email: string) => {
-    const newErrors: Record<string, string> = {};
-    const suggestions: string[] = [];
-
-    // Basic email format validation
+  // Basic email validation
+  const validateEmailFormat = (
+    email: string
+  ): { isValid: boolean; message?: string } => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
     if (!email.trim()) {
-      newErrors.email = "Email is required";
-      return { errors: newErrors, suggestions };
+      return { isValid: false, message: "Email is required" };
     }
 
     if (!emailRegex.test(email)) {
-      newErrors.email = "Please enter a valid email address";
-      return { errors: newErrors, suggestions };
+      return { isValid: false, message: "Please enter a valid email address" };
     }
 
-    const [localPart, domain] = email.split("@");
-    if (domain) {
-      // Check for disposable/temporary emails
-      const isDisposable = disposableEmailDomains.some((disposable) =>
+    // Check for disposable emails
+    const domain = email.split("@")[1];
+    if (
+      domain &&
+      disposableEmailDomains.some((disposable) =>
         domain.toLowerCase().includes(disposable.toLowerCase())
-      );
-
-      if (isDisposable) {
-        newErrors.email = "Please use a permanent email address";
-        suggestions.push("Disposable/temporary emails are not allowed");
-      }
-
-      // Check for domain typos and suggest corrections
-      const typedDomain = domain.toLowerCase();
-      for (const commonDomain of commonEmailDomains) {
-        if (
-          typedDomain.includes(commonDomain.replace(".", "")) ||
-          (typedDomain.length >= 3 && commonDomain.includes(typedDomain)) ||
-          levenshteinDistance(typedDomain, commonDomain) <= 2
-        ) {
-          const suggestedEmail = `${localPart}@${commonDomain}`;
-          if (suggestedEmail !== email.toLowerCase()) {
-            suggestions.push(`Did you mean ${suggestedEmail}?`);
-          }
-        }
-      }
-
-      // Check for invalid TLDs
-      const validTLDs = [
-        "com",
-        "org",
-        "net",
-        "edu",
-        "gov",
-        "io",
-        "co",
-        "ai",
-        "dev",
-        "me",
-        "info",
-        "biz",
-        "us",
-        "uk",
-        "ca",
-        "au",
-        "in",
-      ];
-      const tld = domain.split(".").pop()?.toLowerCase();
-      if (tld && !validTLDs.includes(tld) && tld.length <= 3) {
-        suggestions.push("This email domain might be incorrect");
-      }
-
-      // Check for suspicious patterns
-      if (localPart.length > 50) {
-        suggestions.push("Email username seems unusually long");
-      }
-
-      if (domain.split(".").length > 3) {
-        suggestions.push("Email domain has too many subdomains");
-      }
+      )
+    ) {
+      return {
+        isValid: false,
+        message: "Please use a permanent email address",
+      };
     }
 
-    return { errors: newErrors, suggestions };
-  }, []);
+    return { isValid: true };
+  };
 
   // Levenshtein distance for typo detection
   const levenshteinDistance = (a: string, b: string): number => {
@@ -376,10 +296,8 @@ export default function Register() {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { id, value, type, checked } = e.target;
 
-    // Clear email states when email changes
     if (id === "email") {
       setEmailStatus({ exists: false, email_verified: null });
-      // Clear cache for this email
       emailCheckCache.delete(value.toLowerCase());
     }
 
@@ -388,47 +306,32 @@ export default function Register() {
       [id]: type === "checkbox" ? checked : value,
     }));
 
-    // Validate email in real-time
     if (id === "email") {
-      const { errors: emailErrors, suggestions } = validateEmail(value);
-      setEmailSuggestions(suggestions);
+      const { isValid, message } = validateEmailFormat(value);
 
-      // Update errors
-      setErrors((prev) => {
-        const newErrors = { ...prev };
-        if (emailErrors.email) {
-          newErrors.email = emailErrors.email;
-          delete newErrors.submit;
-        } else if (newErrors.email) {
+      if (!isValid && message) {
+        setErrors((prev) => ({ ...prev, email: message }));
+        setEmailSuggestions([]);
+      } else if (errors.email) {
+        setErrors((prev) => {
+          const newErrors = { ...prev };
           delete newErrors.email;
-        }
-        return newErrors;
-      });
+          delete newErrors.submit;
+          return newErrors;
+        });
+        setEmailSuggestions([]);
+      }
 
-      // Clear previous debounce timer
       if (debouncedEmailCheck.current) {
         clearTimeout(debouncedEmailCheck.current);
       }
 
-      // Only check if email format is valid and not disposable
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (emailRegex.test(value) && !emailErrors.email) {
-        // Check if email is not disposable
-        const domain = value.split("@")[1];
-        const isDisposable =
-          domain &&
-          disposableEmailDomains.some((disposable) =>
-            domain.toLowerCase().includes(disposable.toLowerCase())
-          );
-
-        if (!isDisposable) {
-          debouncedEmailCheck.current = setTimeout(() => {
-            checkEmailWithVerification(value);
-          }, 800);
-        }
+      if (isValid) {
+        debouncedEmailCheck.current = setTimeout(() => {
+          checkEmailWithVerification(value);
+        }, 800);
       }
     } else {
-      // Clear error for other fields
       if (errors[id]) {
         setErrors((prev) => {
           const newErrors = { ...prev };
@@ -439,7 +342,6 @@ export default function Register() {
     }
   };
 
-  // Cleanup on unmount
   React.useEffect(() => {
     return () => {
       if (debouncedEmailCheck.current) {
@@ -449,7 +351,7 @@ export default function Register() {
   }, []);
 
   // Validate form
-  const validateForm = () => {
+  const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
 
     // Required fields
@@ -458,20 +360,19 @@ export default function Register() {
     if (!formData.lastName.trim()) newErrors.lastName = "Last name is required";
 
     // Email validation
-    const { errors: emailErrors } = validateEmail(formData.email);
-    Object.assign(newErrors, emailErrors);
+    const emailValidation = validateEmailFormat(formData.email);
+    if (!emailValidation.isValid && emailValidation.message) {
+      newErrors.email = emailValidation.message;
+    }
 
     // Check email existence and verification status
-    if (!emailErrors.email && emailStatus.exists) {
+    if (!newErrors.email && emailStatus.exists) {
       if (emailStatus.email_verified === true) {
         newErrors.email =
           "This email is already registered and verified. Please use a different email or try logging in.";
       } else if (emailStatus.email_verified === false) {
         newErrors.email =
           "This email is registered but not verified. Please check your email for the verification link or click below to resend.";
-      } else {
-        newErrors.email =
-          "This email is already registered. Please use a different email or try logging in.";
       }
     }
 
@@ -572,7 +473,6 @@ export default function Register() {
 
         // Handle specific Supabase errors
         if (authError.message.includes("User already registered")) {
-          // Update cache
           emailCheckCache.set(normalizedEmail, {
             exists: true,
             email_verified: null,
@@ -601,7 +501,7 @@ export default function Register() {
         throw new Error("Registration failed. Please try again.");
       }
 
-      // CRITICAL: Insert user into users table with email_verified = false
+      // Insert user into users table with email_verified = false
       try {
         const { error: insertError } = await supabase.from("users").insert({
           id: authData.user.id,
@@ -879,7 +779,7 @@ export default function Register() {
                         <>
                           <UserX className="h-3 w-3 text-red-500" />
                           <span className="text-red-500">
-                            ✓ Verified Account
+                            ✗ Email Already Exist
                           </span>
                         </>
                       ) : emailStatus.email_verified === false ? (
@@ -928,94 +828,13 @@ export default function Register() {
               </div>
             </div>
 
-            {/* Email Errors */}
-            {(errors.email || emailStatus.exists) && (
-              <div className="space-y-1">
-                {emailSuggestions.length > 0 && (
-                  <div className="text-xs text-amber-600 dark:text-amber-400">
-                    {emailSuggestions.map((suggestion, index) => (
-                      <p key={index} className="flex items-center gap-1">
-                        <AlertCircle className="h-3 w-3" />
-                        {suggestion}
-                      </p>
-                    ))}
-                  </div>
-                )}
-                {emailStatus.exists && emailStatus.email_verified !== null && (
-                  <div
-                    className={`text-xs ${emailStatus.email_verified ? "text-red-500" : "text-amber-500"}`}
-                  >
-                    {emailStatus.email_verified ? (
-                      <p className="flex items-center gap-1">
-                        <XCircle className="h-3 w-3" />
-                        Email is already verified. Please use a different email
-                        or login.
-                      </p>
-                    ) : (
-                      <p className="flex items-center gap-1">
-                        <AlertTriangle className="h-3 w-3" />
-                        Email registered but not verified. Click the button
-                        above to resend verification.
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Email Requirements */}
-            <div className="space-y-1 mt-2">
-              <p className="text-xs font-medium dark:text-gray-400">
-                Email requirements:
+            {/* Email Error */}
+            {errors.email && (
+              <p className="text-xs text-red-500 flex items-center gap-1">
+                <XCircle className="h-3 w-3" />
+                {errors.email}
               </p>
-              <div className="space-y-1">
-                {[
-                  {
-                    key: "format",
-                    met: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email),
-                    label: "Valid email format (user@domain.com)",
-                  },
-                  {
-                    key: "disposable",
-                    met: !disposableEmailDomains.some((domain) =>
-                      formData.email
-                        .toLowerCase()
-                        .includes(domain.toLowerCase())
-                    ),
-                    label: "Not a disposable/temporary email",
-                  },
-                  {
-                    key: "registered",
-                    met:
-                      !emailStatus.exists ||
-                      emailStatus.email_verified === false,
-                    label: emailStatus.exists
-                      ? emailStatus.email_verified === true
-                        ? "❌ Email already verified (use different)"
-                        : "⚠️ Email registered but not verified"
-                      : "Email not already registered",
-                    showOnlyIfRegistered: true,
-                  },
-                ].map(({ key, met, label, showOnlyIfRegistered }) => {
-                  if (showOnlyIfRegistered && !emailStatus.exists) return null;
-
-                  return (
-                    <div key={key} className="flex items-center gap-2">
-                      {met || !formData.email ? (
-                        <CheckCircle className="h-3 w-3 text-green-500" />
-                      ) : (
-                        <XCircle className="h-3 w-3 text-red-500" />
-                      )}
-                      <span
-                        className={`text-xs ${met ? "text-green-600 dark:text-green-500" : "text-red-500 dark:text-red-400"}`}
-                      >
-                        {label}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+            )}
           </div>
 
           {/* Password Field */}
@@ -1070,40 +889,38 @@ export default function Register() {
               </p>
             )}
 
-            {/* Password Requirements */}
-            {formData.password && (
-              <div className="space-y-1 mt-2">
-                <p className="text-xs font-medium dark:text-gray-400">
-                  Password must contain:
-                </p>
-                <div className="space-y-1">
-                  {Object.entries(passwordRequirements).map(([key, met]) => {
-                    const labels: Record<string, string> = {
-                      length: "At least 8 characters",
-                      uppercase: "One uppercase letter (A-Z)",
-                      lowercase: "One lowercase letter (a-z)",
-                      number: "One number (0-9)",
-                      special: "One special character (!@#$%^&*)",
-                    };
+            {/* Password Requirements - Always visible */}
+            <div className="space-y-1 mt-2">
+              <p className="text-xs font-medium dark:text-gray-400">
+                Password must contain:
+              </p>
+              <div className="space-y-1">
+                {Object.entries(passwordRequirements).map(([key, met]) => {
+                  const labels: Record<string, string> = {
+                    length: "At least 8 characters",
+                    uppercase: "One uppercase letter (A-Z)",
+                    lowercase: "One lowercase letter (a-z)",
+                    number: "One number (0-9)",
+                    special: "One special character (!@#$%^&*)",
+                  };
 
-                    return (
-                      <div key={key} className="flex items-center gap-2">
-                        {met ? (
-                          <CheckCircle className="h-3 w-3 text-green-500" />
-                        ) : (
-                          <XCircle className="h-3 w-3 text-gray-400" />
-                        )}
-                        <span
-                          className={`text-xs ${met ? "text-green-600 dark:text-green-500" : "text-gray-500 dark:text-gray-400"}`}
-                        >
-                          {labels[key]}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
+                  return (
+                    <div key={key} className="flex items-center gap-2">
+                      {met ? (
+                        <CheckCircle className="h-3 w-3 text-green-500" />
+                      ) : (
+                        <XCircle className="h-3 w-3 text-gray-400" />
+                      )}
+                      <span
+                        className={`text-xs ${met ? "text-green-600 dark:text-green-500" : "text-gray-500 dark:text-gray-400"}`}
+                      >
+                        {labels[key]}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
-            )}
+            </div>
           </div>
 
           {/* Confirm Password Field */}
@@ -1304,7 +1121,7 @@ export default function Register() {
         <p className="mt-8 text-center text-sm text-muted-foreground dark:text-gray-400">
           Already have an account?{" "}
           <Link
-            to="/"
+            to="/login"
             className="text-primary font-medium hover:underline dark:text-primary-400"
             onClick={(e) => isSubmitting && e.preventDefault()}
           >

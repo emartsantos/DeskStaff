@@ -421,69 +421,6 @@ export default function AuthCallback() {
               </div>
             </div>
 
-            {/* Verification Details */}
-            {(emailConfirmationData || emailVerified !== null) && (
-              <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                  Verification Details
-                </h3>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Database Status */}
-                  <Card className="p-4 border shadow-sm">
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-1">
-                        <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                          Database Status
-                        </p>
-                        <div className="flex items-center gap-2">
-                          <div
-                            className={`h-2 w-2 rounded-full ${emailVerified ? "bg-green-500" : "bg-red-500"}`}
-                          />
-                          <p
-                            className={`text-sm font-medium ${emailVerified ? "text-green-600" : "text-red-600"}`}
-                          >
-                            email_verified = {emailVerified ? "TRUE" : "FALSE"}
-                          </p>
-                        </div>
-                      </div>
-                      <Shield
-                        className={`h-5 w-5 ${emailVerified ? "text-green-500" : "text-red-500"}`}
-                      />
-                    </div>
-                  </Card>
-
-                  {/* Auth Status */}
-                  {emailConfirmationData && (
-                    <Card className="p-4 border shadow-sm">
-                      <div className="flex items-center justify-between">
-                        <div className="space-y-1">
-                          <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                            Authentication
-                          </p>
-                          <div className="flex items-center gap-2">
-                            <div
-                              className={`h-2 w-2 rounded-full ${emailConfirmationData.confirmedInAuth ? "bg-green-500" : "bg-red-500"}`}
-                            />
-                            <p
-                              className={`text-sm font-medium ${emailConfirmationData.confirmedInAuth ? "text-green-600" : "text-red-600"}`}
-                            >
-                              {emailConfirmationData.confirmedInAuth
-                                ? "Confirmed"
-                                : "Not Confirmed"}
-                            </p>
-                          </div>
-                        </div>
-                        <UserCheck
-                          className={`h-5 w-5 ${emailConfirmationData.confirmedInAuth ? "text-green-500" : "text-red-500"}`}
-                        />
-                      </div>
-                    </Card>
-                  )}
-                </div>
-              </div>
-            )}
-
             {/* Action Buttons */}
             <div className="space-y-3 pt-4">
               {status === "verified" && (
