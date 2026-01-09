@@ -1,11 +1,10 @@
 {
-  "homepage": "https://emartsantos.github.io/Deskstaff",
   "name": "deskstaff",
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "vite build",
-    "dev": "vite",
+    "build": "react-router build",
+    "dev": "react-router dev",
     "start": "react-router-serve ./build/server/index.js",
     "typecheck": "react-router typegen && tsc",
     "predeploy": "npm run build",
