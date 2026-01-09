@@ -83,7 +83,12 @@ import {
   TrendingUp,
   Users as UsersIcon,
   BriefcaseBusiness,
+  Sun,
+  Moon,
 } from "lucide-react";
+
+// Add ThemeToggle component import
+import { useTheme } from "@/context/ThemeProvider";
 
 interface UserProfile {
   id: string;
@@ -133,6 +138,7 @@ interface Friend {
   status: "pending" | "accepted" | "requested";
   department?: string;
   position?: string;
+  logged_in?: boolean;
 }
 
 export default function Profile() {
@@ -183,6 +189,28 @@ export default function Profile() {
   const [isPosting, setIsPosting] = useState(false);
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+
+  // Add theme hook
+  const { theme, toggleTheme } = useTheme();
+
+  // Add ThemeToggle component inline since it's not imported
+  const ThemeToggle = () => {
+    return (
+      <Button
+        variant="outline"
+        size="icon"
+        onClick={toggleTheme}
+        className="rounded-full w-10 h-10 backdrop-blur-sm bg-white/70 dark:bg-gray-800/70 hover:scale-105 transition-transform border-gray-300 dark:border-gray-600"
+        aria-label="Toggle theme"
+      >
+        {theme === "dark" ? (
+          <Sun className="h-5 w-5 text-yellow-500" />
+        ) : (
+          <Moon className="h-5 w-5 text-gray-700" />
+        )}
+      </Button>
+    );
+  };
 
   // Fetch user data
   useEffect(() => {
@@ -305,7 +333,6 @@ export default function Profile() {
   }, [urlUserId, currentUserId]); // Update dependency array
 
   // Function to update user's logged_in status in database
-  // Function to update user's logged_in status in database
   const updateUserLoginStatus = async (isLoggedIn: boolean): Promise<void> => {
     try {
       const {
@@ -397,9 +424,6 @@ export default function Profile() {
       const isOwnProfile = userIdToFetch === session.user.id;
       setIsOwnProfile(isOwnProfile);
       console.log("👥 Is own profile?", isOwnProfile);
-
-      // ⚠️ REMOVED: Don't call setUserOnline here - it might be failing
-      // await setUserOnline(); // Remove this line
 
       // Fetch user data from database
       console.log("📥 Querying database for user...");
@@ -512,6 +536,38 @@ export default function Profile() {
     }
   };
 
+  const createUserRecord = async (authUser: any) => {
+    try {
+      const { error } = await supabase.from("users").insert({
+        id: authUser.id,
+        email: authUser.email,
+        first_name: authUser.user_metadata?.first_name || "",
+        last_name: authUser.user_metadata?.last_name || "",
+        full_name:
+          `${authUser.user_metadata?.first_name || ""} ${authUser.user_metadata?.last_name || ""}`.trim() ||
+          authUser.email?.split("@")[0] ||
+          "User",
+        avatar_url: null,
+        bio: null,
+        location: null,
+        workplace: null,
+        education: null,
+        birthday: null,
+        website: null,
+        privacy: "public",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        logged_in: true,
+      });
+
+      if (error) throw error;
+      console.log("✅ New user record created");
+    } catch (error) {
+      console.error("Error creating user record:", error);
+      throw error;
+    }
+  };
+
   const fetchPosts = async () => {
     try {
       // Determine which posts to fetch based on profile
@@ -538,7 +594,7 @@ export default function Profile() {
           liked: false,
           bookmarked: false,
         },
-        // ... other posts
+        // Add more mock posts as needed
       ];
       setPosts(mockPosts);
     } catch (error) {
@@ -570,7 +626,7 @@ export default function Profile() {
           position: "Marketing Manager",
           logged_in: false, // Offline
         },
-        // ... other friends
+        // Add more mock friends as needed
       ];
       setFriends(mockFriends);
     } catch (error) {
@@ -613,16 +669,6 @@ export default function Profile() {
       console.error("Test error:", error);
     }
   };
-
-  // Add a test button to your UI temporarily
-  <Button
-    variant="outline"
-    size="sm"
-    onClick={testLoginStatusUpdate}
-    className="mb-2"
-  >
-    Test Login Status Update
-  </Button>;
 
   const handleLogout = async () => {
     setIsLogoutDialogOpen(false);
@@ -952,17 +998,20 @@ export default function Profile() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <Skeleton className="h-64 w-full rounded-xl" />
+          <Skeleton className="h-64 w-full rounded-xl bg-gray-200 dark:bg-gray-700" />
           <div className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-6">
-              <Skeleton className="h-32 w-full rounded-xl" />
+              <Skeleton className="h-32 w-full rounded-xl bg-gray-200 dark:bg-gray-700" />
               {[1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-64 w-full rounded-xl" />
+                <Skeleton
+                  key={i}
+                  className="h-64 w-full rounded-xl bg-gray-200 dark:bg-gray-700"
+                />
               ))}
             </div>
             <div className="space-y-6">
-              <Skeleton className="h-48 w-full rounded-xl" />
-              <Skeleton className="h-64 w-full rounded-xl" />
+              <Skeleton className="h-48 w-full rounded-xl bg-gray-200 dark:bg-gray-700" />
+              <Skeleton className="h-64 w-full rounded-xl bg-gray-200 dark:bg-gray-700" />
             </div>
           </div>
         </div>
@@ -990,16 +1039,19 @@ export default function Profile() {
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                   <Input
                     placeholder="Search colleagues, projects, or documents..."
-                    className="pl-10 w-64 bg-gray-100/50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600 focus:border-blue-500 focus:ring-blue-500"
+                    className="pl-10 w-64 bg-gray-100/50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600 focus:border-blue-500 focus:ring-blue-500 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
                   />
                 </div>
               </div>
 
               <div className="flex items-center space-x-3">
+                {/* Theme Toggle Button */}
+                <ThemeToggle />
+
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
+                  className="rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
                   title="Home"
                 >
                   <Home className="h-5 w-5" />
@@ -1007,7 +1059,7 @@ export default function Profile() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 relative"
+                  className="rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 relative text-gray-700 dark:text-gray-300"
                   title="Notifications"
                 >
                   <Bell className="h-5 w-5" />
@@ -1018,7 +1070,7 @@ export default function Profile() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 relative"
+                  className="rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 relative text-gray-700 dark:text-gray-300"
                   title="Messages"
                 >
                   <MessageCircle className="h-5 w-5" />
@@ -1029,7 +1081,7 @@ export default function Profile() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
+                  className="rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
                   title="Teams"
                 >
                   <UsersIcon className="h-5 w-5" />
@@ -1050,39 +1102,50 @@ export default function Profile() {
                       </Avatar>
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent className="w-56" align="end">
-                    <DropdownMenuLabel className="flex items-center gap-2">
+                  <DropdownMenuContent
+                    className="w-56 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700"
+                    align="end"
+                  >
+                    <DropdownMenuLabel className="flex items-center gap-2 text-gray-900 dark:text-white">
                       <div className="flex-1">
                         <p className="font-semibold">{user?.full_name}</p>
-                        <p className="text-xs text-gray-500 truncate">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
                           {user?.position || "Employee"}
                         </p>
                       </div>
                     </DropdownMenuLabel>
-                    <DropdownMenuSeparator />
+                    <DropdownMenuSeparator className="bg-gray-200 dark:bg-gray-700" />
                     <DropdownMenuItem
                       onClick={() => navigate(`/profile/${currentUserId}`)}
+                      className="text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                     >
                       <User className="mr-2 h-4 w-4" />
                       My Profile
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setIsEditing(true)}>
+                    <DropdownMenuItem
+                      onClick={() => setIsEditing(true)}
+                      className="text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    >
                       <Edit className="mr-2 h-4 w-4" />
                       Edit Profile
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setIsPrivacyOpen(true)}>
+                    <DropdownMenuItem
+                      onClick={() => setIsPrivacyOpen(true)}
+                      className="text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    >
                       <Shield className="mr-2 h-4 w-4" />
                       Privacy Settings
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       onClick={() => setIsChangePasswordOpen(true)}
+                      className="text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                     >
                       <Key className="mr-2 h-4 w-4" />
                       Change Password
                     </DropdownMenuItem>
-                    <DropdownMenuSeparator />
+                    <DropdownMenuSeparator className="bg-gray-200 dark:bg-gray-700" />
                     <DropdownMenuItem
-                      className="text-red-600 focus:text-red-600"
+                      className="text-red-600 focus:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
                       onClick={() => setIsLogoutDialogOpen(true)}
                     >
                       <LogOut className="mr-2 h-4 w-4" />
@@ -1098,7 +1161,7 @@ export default function Profile() {
         {/* Main Content */}
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           {/* Profile Header */}
-          <Card className="mb-6 overflow-hidden border-gray-200/50 dark:border-gray-700/50 shadow-lg">
+          <Card className="mb-6 overflow-hidden border-gray-200/50 dark:border-gray-700/50 shadow-lg bg-white dark:bg-gray-900">
             <div className="relative h-56 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-600">
               <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
               <div className="absolute bottom-4 right-4 flex gap-2">
@@ -1149,7 +1212,7 @@ export default function Profile() {
                         ) : user?.last_seen ? (
                           <Badge
                             variant="outline"
-                            className="border-gray-300 dark:border-gray-600"
+                            className="border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300"
                           >
                             <div className="h-1.5 w-1.5 rounded-full bg-gray-400 mr-1.5"></div>
                             Offline
@@ -1226,18 +1289,26 @@ export default function Profile() {
                         onClick={() =>
                           toast.info("Messaging feature coming soon!")
                         }
+                        className="border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300"
                       >
                         <MessageSquare className="h-4 w-4 mr-2" />
                         Message
                       </Button>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="outline" size="icon">
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300"
+                          >
                             <MoreHorizontal className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent>
-                          <DropdownMenuItem onClick={() => setIsEditing(true)}>
+                        <DropdownMenuContent className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700">
+                          <DropdownMenuItem
+                            onClick={() => setIsEditing(true)}
+                            className="text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                          >
                             <Edit className="mr-2 h-4 w-4" />
                             Edit Profile
                           </DropdownMenuItem>
@@ -1245,13 +1316,14 @@ export default function Profile() {
                             onClick={() =>
                               toast.info("Saved items feature coming soon!")
                             }
+                            className="text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                           >
                             <Bookmark className="mr-2 h-4 w-4" />
                             Saved Items
                           </DropdownMenuItem>
-                          <DropdownMenuSeparator />
+                          <DropdownMenuSeparator className="bg-gray-200 dark:bg-gray-700" />
                           <DropdownMenuItem
-                            className="text-red-600"
+                            className="text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
                             onClick={() =>
                               toast.error(
                                 "Account deletion is not available yet"
@@ -1274,11 +1346,11 @@ export default function Profile() {
             {/* Left Column - Info & Connections */}
             <div className="space-y-6">
               {/* Bio Card */}
-              <Card className="border-gray-200/50 dark:border-gray-700/50">
+              <Card className="border-gray-200/50 dark:border-gray-700/50 bg-white dark:bg-gray-900">
                 <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center justify-between text-lg">
+                  <CardTitle className="flex items-center justify-between text-lg text-gray-900 dark:text-white">
                     <span className="flex items-center gap-2">
-                      <FileText className="h-5 w-5 text-blue-600" />
+                      <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                       Professional Summary
                     </span>
                     {!isEditing && (
@@ -1286,6 +1358,7 @@ export default function Profile() {
                         variant="ghost"
                         size="sm"
                         onClick={() => setIsEditing(true)}
+                        className="text-gray-600 dark:text-gray-400"
                       >
                         <Edit className="h-4 w-4" />
                       </Button>
@@ -1301,7 +1374,7 @@ export default function Profile() {
                     <p className="text-gray-400 italic">No summary added yet</p>
                   )}
 
-                  <Separator />
+                  <Separator className="bg-gray-200 dark:bg-gray-700" />
 
                   <div className="space-y-4">
                     <div className="flex items-center gap-3">
@@ -1403,15 +1476,15 @@ export default function Profile() {
               </Card>
 
               {/* Connections Card */}
-              <Card className="border-gray-200/50 dark:border-gray-700/50">
+              <Card className="border-gray-200/50 dark:border-gray-700/50 bg-white dark:bg-gray-900">
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
                     <div>
-                      <CardTitle className="flex items-center gap-2">
-                        <UsersIcon className="h-5 w-5 text-blue-600" />
+                      <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white">
+                        <UsersIcon className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                         Connections
                       </CardTitle>
-                      <CardDescription>
+                      <CardDescription className="text-gray-600 dark:text-gray-400">
                         {friends.length} professional connections
                       </CardDescription>
                     </div>
@@ -1421,6 +1494,7 @@ export default function Profile() {
                       onClick={() =>
                         toast.info("Connections page coming soon!")
                       }
+                      className="text-gray-600 dark:text-gray-400"
                     >
                       See all
                     </Button>
@@ -1448,7 +1522,7 @@ export default function Profile() {
                           </Avatar>
                         </div>
                         <div className="space-y-1">
-                          <p className="text-xs font-semibold truncate">
+                          <p className="text-xs font-semibold truncate text-gray-900 dark:text-white">
                             {friend.full_name}
                             {friend.logged_in && (
                               <span className="ml-1 text-green-500">●</span>
@@ -1462,10 +1536,10 @@ export default function Profile() {
               </Card>
 
               {/* Skills & Privacy Card */}
-              <Card className="border-gray-200/50 dark:border-gray-700/50">
+              <Card className="border-gray-200/50 dark:border-gray-700/50 bg-white dark:bg-gray-900">
                 <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center gap-2">
-                    <Award className="h-5 w-5 text-blue-600" />
+                  <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white">
+                    <Award className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                     Skills & Privacy
                   </CardTitle>
                 </CardHeader>
@@ -1499,7 +1573,7 @@ export default function Profile() {
                   </div>
                   <Button
                     variant="outline"
-                    className="w-full border-gray-300 dark:border-gray-600"
+                    className="w-full border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300"
                     onClick={() => setIsPrivacyOpen(true)}
                   >
                     <Settings className="h-4 w-4 mr-2" />
@@ -1512,7 +1586,7 @@ export default function Profile() {
             {/* Middle Column - Posts & Activity */}
             <div className="lg:col-span-2 space-y-6">
               {/* Create Post */}
-              <Card className="border-gray-200/50 dark:border-gray-700/50">
+              <Card className="border-gray-200/50 dark:border-gray-700/50 bg-white dark:bg-gray-900">
                 <CardContent className="pt-6">
                   <div className="flex gap-4">
                     <Avatar className="h-12 w-12">
@@ -1527,7 +1601,7 @@ export default function Profile() {
                         placeholder={`What's on your mind, ${user?.first_name}? Share an update, article, or thought...`}
                         value={newPost}
                         onChange={(e) => setNewPost(e.target.value)}
-                        className="min-h-[120px] resize-none border-gray-300 dark:border-gray-600 focus:border-blue-500"
+                        className="min-h-[120px] resize-none border-gray-300 dark:border-gray-600 focus:border-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
                       />
 
                       {imagePreview && (
@@ -1549,7 +1623,7 @@ export default function Profile() {
                         </div>
                       )}
 
-                      <Separator />
+                      <Separator className="bg-gray-200 dark:bg-gray-700" />
 
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
@@ -1620,21 +1694,21 @@ export default function Profile() {
                 <TabsList className="grid w-full grid-cols-3 bg-gray-100/50 dark:bg-gray-800/50 p-1 rounded-xl">
                   <TabsTrigger
                     value="posts"
-                    className="rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-gray-800 data-[state=active]:shadow-sm"
+                    className="rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-gray-800 data-[state=active]:shadow-sm text-gray-700 dark:text-gray-300"
                   >
                     <FileText className="h-4 w-4 mr-2" />
                     Posts
                   </TabsTrigger>
                   <TabsTrigger
                     value="photos"
-                    className="rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-gray-800 data-[state=active]:shadow-sm"
+                    className="rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-gray-800 data-[state=active]:shadow-sm text-gray-700 dark:text-gray-300"
                   >
                     <ImageIcon className="h-4 w-4 mr-2" />
                     Photos
                   </TabsTrigger>
                   <TabsTrigger
                     value="videos"
-                    className="rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-gray-800 data-[state=active]:shadow-sm"
+                    className="rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-gray-800 data-[state=active]:shadow-sm text-gray-700 dark:text-gray-300"
                   >
                     <Video className="h-4 w-4 mr-2" />
                     Videos
@@ -1645,7 +1719,7 @@ export default function Profile() {
                   {posts.map((post) => (
                     <Card
                       key={post.id}
-                      className="border-gray-200/50 dark:border-gray-700/50 overflow-hidden"
+                      className="border-gray-200/50 dark:border-gray-700/50 overflow-hidden bg-white dark:bg-gray-900"
                     >
                       <CardContent className="pt-6">
                         <div className="flex items-start justify-between mb-4">
@@ -1693,17 +1767,19 @@ export default function Profile() {
                                 <MoreHorizontal className="h-4 w-4" />
                               </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent>
+                            <DropdownMenuContent className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700">
                               <DropdownMenuItem
                                 onClick={() =>
                                   toast.info("Edit post feature coming soon!")
                                 }
+                                className="text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                               >
                                 <Edit className="mr-2 h-4 w-4" />
                                 Edit Post
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 onClick={() => handleBookmarkPost(post.id)}
+                                className="text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                               >
                                 <Bookmark
                                   className={`mr-2 h-4 w-4 ${post.bookmarked ? "fill-current text-yellow-500" : ""}`}
@@ -1712,9 +1788,9 @@ export default function Profile() {
                                   ? "Remove from Bookmarks"
                                   : "Save Post"}
                               </DropdownMenuItem>
-                              <DropdownMenuSeparator />
+                              <DropdownMenuSeparator className="bg-gray-200 dark:bg-gray-700" />
                               <DropdownMenuItem
-                                className="text-red-600"
+                                className="text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
                                 onClick={() => {
                                   setPosts(
                                     posts.filter((p) => p.id !== post.id)
@@ -1761,7 +1837,7 @@ export default function Profile() {
                           </div>
                         </div>
 
-                        <Separator className="mb-4" />
+                        <Separator className="mb-4 bg-gray-200 dark:bg-gray-700" />
 
                         <div className="grid grid-cols-4 gap-1">
                           <Button
@@ -1813,7 +1889,7 @@ export default function Profile() {
                 </TabsContent>
 
                 <TabsContent value="photos">
-                  <Card className="border-gray-200/50 dark:border-gray-700/50">
+                  <Card className="border-gray-200/50 dark:border-gray-700/50 bg-white dark:bg-gray-900">
                     <CardContent className="pt-6">
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                         {posts
@@ -1876,7 +1952,7 @@ export default function Profile() {
                 </TabsContent>
 
                 <TabsContent value="videos">
-                  <Card className="border-gray-200/50 dark:border-gray-700/50">
+                  <Card className="border-gray-200/50 dark:border-gray-700/50 bg-white dark:bg-gray-900">
                     <CardContent className="pt-6 text-center">
                       <div className="py-12 space-y-4">
                         <div className="h-16 w-16 mx-auto rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
@@ -1895,7 +1971,7 @@ export default function Profile() {
                             onClick={() =>
                               toast.info("Video upload feature coming soon!")
                             }
-                            className="border-gray-300 dark:border-gray-600"
+                            className="border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300"
                           >
                             <Video className="h-4 w-4 mr-2" />
                             Upload Your First Video
@@ -1912,10 +1988,12 @@ export default function Profile() {
 
         {/* Edit Profile Dialog */}
         <Dialog open={isEditing} onOpenChange={setIsEditing}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
             <DialogHeader>
-              <DialogTitle className="text-xl">Edit Profile</DialogTitle>
-              <DialogDescription>
+              <DialogTitle className="text-xl text-gray-900 dark:text-white">
+                Edit Profile
+              </DialogTitle>
+              <DialogDescription className="text-gray-600 dark:text-gray-400">
                 Update your professional profile information.
               </DialogDescription>
             </DialogHeader>
@@ -1923,31 +2001,43 @@ export default function Profile() {
             <div className="space-y-6 py-2">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="first_name">First Name</Label>
+                  <Label
+                    htmlFor="first_name"
+                    className="text-gray-900 dark:text-white"
+                  >
+                    First Name
+                  </Label>
                   <Input
                     id="first_name"
                     value={editForm.first_name}
                     onChange={(e) =>
                       setEditForm({ ...editForm, first_name: e.target.value })
                     }
-                    className="border-gray-300 dark:border-gray-600"
+                    className="border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="last_name">Last Name</Label>
+                  <Label
+                    htmlFor="last_name"
+                    className="text-gray-900 dark:text-white"
+                  >
+                    Last Name
+                  </Label>
                   <Input
                     id="last_name"
                     value={editForm.last_name}
                     onChange={(e) =>
                       setEditForm({ ...editForm, last_name: e.target.value })
                     }
-                    className="border-gray-300 dark:border-gray-600"
+                    className="border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                   />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="bio">Professional Summary</Label>
+                <Label htmlFor="bio" className="text-gray-900 dark:text-white">
+                  Professional Summary
+                </Label>
                 <Textarea
                   id="bio"
                   value={editForm.bio}
@@ -1955,13 +2045,18 @@ export default function Profile() {
                     setEditForm({ ...editForm, bio: e.target.value })
                   }
                   placeholder="Tell people about your professional background and expertise..."
-                  className="min-h-[100px] border-gray-300 dark:border-gray-600"
+                  className="min-h-[100px] border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="department">Department</Label>
+                  <Label
+                    htmlFor="department"
+                    className="text-gray-900 dark:text-white"
+                  >
+                    Department
+                  </Label>
                   <Input
                     id="department"
                     value={editForm.department}
@@ -1969,11 +2064,16 @@ export default function Profile() {
                       setEditForm({ ...editForm, department: e.target.value })
                     }
                     placeholder="Engineering, Marketing, HR, etc."
-                    className="border-gray-300 dark:border-gray-600"
+                    className="border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="position">Position</Label>
+                  <Label
+                    htmlFor="position"
+                    className="text-gray-900 dark:text-white"
+                  >
+                    Position
+                  </Label>
                   <Input
                     id="position"
                     value={editForm.position}
@@ -1981,14 +2081,19 @@ export default function Profile() {
                       setEditForm({ ...editForm, position: e.target.value })
                     }
                     placeholder="Your job title"
-                    className="border-gray-300 dark:border-gray-600"
+                    className="border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="location">Location</Label>
+                  <Label
+                    htmlFor="location"
+                    className="text-gray-900 dark:text-white"
+                  >
+                    Location
+                  </Label>
                   <Input
                     id="location"
                     value={editForm.location}
@@ -1996,11 +2101,16 @@ export default function Profile() {
                       setEditForm({ ...editForm, location: e.target.value })
                     }
                     placeholder="City, Country"
-                    className="border-gray-300 dark:border-gray-600"
+                    className="border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="phone">Phone</Label>
+                  <Label
+                    htmlFor="phone"
+                    className="text-gray-900 dark:text-white"
+                  >
+                    Phone
+                  </Label>
                   <Input
                     id="phone"
                     value={editForm.phone}
@@ -2008,14 +2118,19 @@ export default function Profile() {
                       setEditForm({ ...editForm, phone: e.target.value })
                     }
                     placeholder="+1 (555) 123-4567"
-                    className="border-gray-300 dark:border-gray-600"
+                    className="border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="workplace">Company</Label>
+                  <Label
+                    htmlFor="workplace"
+                    className="text-gray-900 dark:text-white"
+                  >
+                    Company
+                  </Label>
                   <Input
                     id="workplace"
                     value={editForm.workplace}
@@ -2023,11 +2138,16 @@ export default function Profile() {
                       setEditForm({ ...editForm, workplace: e.target.value })
                     }
                     placeholder="Your company name"
-                    className="border-gray-300 dark:border-gray-600"
+                    className="border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="hire_date">Hire Date</Label>
+                  <Label
+                    htmlFor="hire_date"
+                    className="text-gray-900 dark:text-white"
+                  >
+                    Hire Date
+                  </Label>
                   <Input
                     id="hire_date"
                     type="date"
@@ -2035,14 +2155,19 @@ export default function Profile() {
                     onChange={(e) =>
                       setEditForm({ ...editForm, hire_date: e.target.value })
                     }
-                    className="border-gray-300 dark:border-gray-600"
+                    className="border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="education">Education</Label>
+                  <Label
+                    htmlFor="education"
+                    className="text-gray-900 dark:text-white"
+                  >
+                    Education
+                  </Label>
                   <Input
                     id="education"
                     value={editForm.education}
@@ -2050,11 +2175,16 @@ export default function Profile() {
                       setEditForm({ ...editForm, education: e.target.value })
                     }
                     placeholder="Your educational background"
-                    className="border-gray-300 dark:border-gray-600"
+                    className="border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="birthday">Birthday</Label>
+                  <Label
+                    htmlFor="birthday"
+                    className="text-gray-900 dark:text-white"
+                  >
+                    Birthday
+                  </Label>
                   <Input
                     id="birthday"
                     type="date"
@@ -2062,13 +2192,18 @@ export default function Profile() {
                     onChange={(e) =>
                       setEditForm({ ...editForm, birthday: e.target.value })
                     }
-                    className="border-gray-300 dark:border-gray-600"
+                    className="border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                   />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="website">Website</Label>
+                <Label
+                  htmlFor="website"
+                  className="text-gray-900 dark:text-white"
+                >
+                  Website
+                </Label>
                 <Input
                   id="website"
                   value={editForm.website}
@@ -2076,12 +2211,17 @@ export default function Profile() {
                     setEditForm({ ...editForm, website: e.target.value })
                   }
                   placeholder="https://yourportfolio.com"
-                  className="border-gray-300 dark:border-gray-600"
+                  className="border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="privacy">Profile Privacy</Label>
+                <Label
+                  htmlFor="privacy"
+                  className="text-gray-900 dark:text-white"
+                >
+                  Profile Privacy
+                </Label>
                 <div className="grid grid-cols-3 gap-2">
                   <Button
                     type="button"
@@ -2091,7 +2231,7 @@ export default function Profile() {
                     onClick={() =>
                       setEditForm({ ...editForm, privacy: "public" })
                     }
-                    className="justify-start gap-2 border-gray-300 dark:border-gray-600"
+                    className="justify-start gap-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300"
                   >
                     <Globe className="h-4 w-4" />
                     Public
@@ -2104,7 +2244,7 @@ export default function Profile() {
                     onClick={() =>
                       setEditForm({ ...editForm, privacy: "friends" })
                     }
-                    className="justify-start gap-2 border-gray-300 dark:border-gray-600"
+                    className="justify-start gap-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300"
                   >
                     <Users className="h-4 w-4" />
                     Connections Only
@@ -2117,7 +2257,7 @@ export default function Profile() {
                     onClick={() =>
                       setEditForm({ ...editForm, privacy: "private" })
                     }
-                    className="justify-start gap-2 border-gray-300 dark:border-gray-600"
+                    className="justify-start gap-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300"
                   >
                     <Lock className="h-4 w-4" />
                     Private
@@ -2130,13 +2270,13 @@ export default function Profile() {
               <Button
                 variant="outline"
                 onClick={() => setIsEditing(false)}
-                className="border-gray-300 dark:border-gray-600"
+                className="border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300"
               >
                 Cancel
               </Button>
               <Button
                 onClick={handleUpdateProfile}
-                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white"
               >
                 Save Changes
               </Button>
@@ -2146,10 +2286,12 @@ export default function Profile() {
 
         {/* Logout Dialog */}
         <Dialog open={isLogoutDialogOpen} onOpenChange={setIsLogoutDialogOpen}>
-          <DialogContent>
+          <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
             <DialogHeader>
-              <DialogTitle>Log Out</DialogTitle>
-              <DialogDescription>
+              <DialogTitle className="text-gray-900 dark:text-white">
+                Log Out
+              </DialogTitle>
+              <DialogDescription className="text-gray-600 dark:text-gray-400">
                 Are you sure you want to log out? You will need to sign in again
                 to access your account.
               </DialogDescription>
@@ -2158,7 +2300,7 @@ export default function Profile() {
               <Button
                 variant="outline"
                 onClick={() => setIsLogoutDialogOpen(false)}
-                className="border-gray-300 dark:border-gray-600"
+                className="border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300"
               >
                 Cancel
               </Button>
@@ -2175,10 +2317,12 @@ export default function Profile() {
           open={isChangePasswordOpen}
           onOpenChange={setIsChangePasswordOpen}
         >
-          <DialogContent>
+          <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
             <DialogHeader>
-              <DialogTitle>Change Password</DialogTitle>
-              <DialogDescription>
+              <DialogTitle className="text-gray-900 dark:text-white">
+                Change Password
+              </DialogTitle>
+              <DialogDescription className="text-gray-600 dark:text-gray-400">
                 Enter your current password and a new password to update your
                 account security.
               </DialogDescription>
@@ -2186,7 +2330,12 @@ export default function Profile() {
 
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="currentPassword">Current Password</Label>
+                <Label
+                  htmlFor="currentPassword"
+                  className="text-gray-900 dark:text-white"
+                >
+                  Current Password
+                </Label>
                 <div className="relative">
                   <Input
                     id="currentPassword"
@@ -2198,13 +2347,13 @@ export default function Profile() {
                         currentPassword: e.target.value,
                       })
                     }
-                    className="border-gray-300 dark:border-gray-600"
+                    className="border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                   />
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="absolute right-2 top-1/2 -translate-y-1/2"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-600 dark:text-gray-400"
                     onClick={() => setShowCurrentPassword(!showCurrentPassword)}
                   >
                     {showCurrentPassword ? (
@@ -2217,7 +2366,12 @@ export default function Profile() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="newPassword">New Password</Label>
+                <Label
+                  htmlFor="newPassword"
+                  className="text-gray-900 dark:text-white"
+                >
+                  New Password
+                </Label>
                 <div className="relative">
                   <Input
                     id="newPassword"
@@ -2229,13 +2383,13 @@ export default function Profile() {
                         newPassword: e.target.value,
                       })
                     }
-                    className="border-gray-300 dark:border-gray-600"
+                    className="border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                   />
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="absolute right-2 top-1/2 -translate-y-1/2"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-600 dark:text-gray-400"
                     onClick={() => setShowNewPassword(!showNewPassword)}
                   >
                     {showNewPassword ? (
@@ -2248,7 +2402,12 @@ export default function Profile() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Confirm New Password</Label>
+                <Label
+                  htmlFor="confirmPassword"
+                  className="text-gray-900 dark:text-white"
+                >
+                  Confirm New Password
+                </Label>
                 <div className="relative">
                   <Input
                     id="confirmPassword"
@@ -2260,13 +2419,13 @@ export default function Profile() {
                         confirmPassword: e.target.value,
                       })
                     }
-                    className="border-gray-300 dark:border-gray-600"
+                    className="border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                   />
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="absolute right-2 top-1/2 -translate-y-1/2"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-600 dark:text-gray-400"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                   >
                     {showConfirmPassword ? (
@@ -2283,14 +2442,14 @@ export default function Profile() {
               <Button
                 variant="outline"
                 onClick={() => setIsChangePasswordOpen(false)}
-                className="border-gray-300 dark:border-gray-600"
+                className="border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300"
               >
                 Cancel
               </Button>
               <Button
                 onClick={handleChangePassword}
                 disabled={isChangingPassword}
-                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white"
               >
                 {isChangingPassword ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -2303,10 +2462,12 @@ export default function Profile() {
 
         {/* Privacy Settings Dialog */}
         <Dialog open={isPrivacyOpen} onOpenChange={setIsPrivacyOpen}>
-          <DialogContent>
+          <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
             <DialogHeader>
-              <DialogTitle>Privacy Settings</DialogTitle>
-              <DialogDescription>
+              <DialogTitle className="text-gray-900 dark:text-white">
+                Privacy Settings
+              </DialogTitle>
+              <DialogDescription className="text-gray-600 dark:text-gray-400">
                 Control who can see your profile and activity on DeskStaff.
               </DialogDescription>
             </DialogHeader>
@@ -2315,13 +2476,15 @@ export default function Profile() {
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="font-medium">Profile Visibility</p>
+                    <p className="font-medium text-gray-900 dark:text-white">
+                      Profile Visibility
+                    </p>
                     <p className="text-sm text-gray-500 dark:text-gray-400">
                       Who can see your profile?
                     </p>
                   </div>
                   <select
-                    className="border rounded-lg px-3 py-2 border-gray-300 dark:border-gray-600 bg-transparent"
+                    className="border rounded-lg px-3 py-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                     value={editForm.privacy}
                     onChange={(e) =>
                       setEditForm({
@@ -2339,17 +2502,19 @@ export default function Profile() {
                   </select>
                 </div>
 
-                <Separator />
+                <Separator className="bg-gray-200 dark:bg-gray-700" />
 
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="font-medium">Email Visibility</p>
+                      <p className="font-medium text-gray-900 dark:text-white">
+                        Email Visibility
+                      </p>
                       <p className="text-sm text-gray-500 dark:text-gray-400">
                         Who can see your email?
                       </p>
                     </div>
-                    <select className="border rounded-lg px-3 py-2 border-gray-300 dark:border-gray-600 bg-transparent">
+                    <select className="border rounded-lg px-3 py-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white">
                       <option>Only Me</option>
                       <option>Connections</option>
                     </select>
@@ -2357,12 +2522,14 @@ export default function Profile() {
 
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="font-medium">Connections List</p>
+                      <p className="font-medium text-gray-900 dark:text-white">
+                        Connections List
+                      </p>
                       <p className="text-sm text-gray-500 dark:text-gray-400">
                         Who can see your connections?
                       </p>
                     </div>
-                    <select className="border rounded-lg px-3 py-2 border-gray-300 dark:border-gray-600 bg-transparent">
+                    <select className="border rounded-lg px-3 py-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white">
                       <option>Public</option>
                       <option>Connections Only</option>
                       <option>Only Me</option>
@@ -2371,12 +2538,14 @@ export default function Profile() {
 
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="font-medium">Post Visibility</p>
+                      <p className="font-medium text-gray-900 dark:text-white">
+                        Post Visibility
+                      </p>
                       <p className="text-sm text-gray-500 dark:text-gray-400">
                         Default audience for new posts
                       </p>
                     </div>
-                    <select className="border rounded-lg px-3 py-2 border-gray-300 dark:border-gray-600 bg-transparent">
+                    <select className="border rounded-lg px-3 py-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white">
                       <option>Public</option>
                       <option>Connections Only</option>
                       <option>Only Me</option>
@@ -2390,7 +2559,7 @@ export default function Profile() {
               <Button
                 variant="outline"
                 onClick={() => setIsPrivacyOpen(false)}
-                className="border-gray-300 dark:border-gray-600"
+                className="border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300"
               >
                 Cancel
               </Button>
@@ -2400,13 +2569,25 @@ export default function Profile() {
                   setIsPrivacyOpen(false);
                   toast.success("Privacy settings updated");
                 }}
-                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white"
               >
                 Save Privacy Settings
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Add test button for login status (optional) */}
+        <div className="fixed bottom-4 right-4">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={testLoginStatusUpdate}
+            className="border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300"
+          >
+            Test Login Status Update
+          </Button>
+        </div>
       </div>
     </ProtectedRoute>
   );
