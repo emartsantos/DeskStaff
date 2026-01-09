@@ -5,5 +5,5 @@ export default [
   route("register", "routes/register.tsx"),
   route("auth/callback", "routes/auth/callback.tsx"),
   route("auth/google", "routes/auth/GoogleAuth.tsx"),
-  route("profile", "routes/profile.tsx"),
+  route("profile/:userId", "routes/profile.tsx"), // Add this dynamic route
 ] satisfies RouteConfig;

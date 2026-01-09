@@ -1,6 +1,6 @@
 // src/routes/profile.tsx
 import { useState, useEffect } from "react";
-import { useNavigate, Link } from "react-router";
+import { useNavigate, Link, useParams } from "react-router";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -135,7 +135,9 @@ interface Friend {
 
 export default function Profile() {
   const navigate = useNavigate();
+  const { userId: urlUserId } = useParams();
   const [user, setUser] = useState<UserProfile | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [posts, setPosts] = useState<Post[]>([]);
   const [friends, setFriends] = useState<Friend[]>([]);
@@ -143,6 +145,7 @@ export default function Profile() {
   const [isEditing, setIsEditing] = useState(false);
   const [isLogoutDialogOpen, setIsLogoutDialogOpen] = useState(false);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+  const [isOwnProfile, setIsOwnProfile] = useState(false);
   const [isPrivacyOpen, setIsPrivacyOpen] = useState(false);
 
   // Edit form state
@@ -214,17 +217,18 @@ export default function Profile() {
   }, [navigate]);
 
   useEffect(() => {
-    if (!user?.id) return;
+    const userIdToSubscribe = urlUserId || currentUserId;
+    if (!userIdToSubscribe) return;
 
     const channel = supabase
-      .channel(`user-${user.id}`)
+      .channel(`user-${userIdToSubscribe}`)
       .on(
         "postgres_changes",
         {
           event: "UPDATE",
           schema: "public",
           table: "users",
-          filter: `id=eq.${user.id}`,
+          filter: `id=eq.${userIdToSubscribe}`,
         },
         (payload) => {
           console.log("User updated:", payload.new);
@@ -236,7 +240,7 @@ export default function Profile() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user?.id]);
+  }, [urlUserId, currentUserId]); // Update dependency array
 
   const fetchUserData = async () => {
     try {
@@ -253,11 +257,20 @@ export default function Profile() {
         return;
       }
 
+      // Set current user ID from session
+      setCurrentUserId(session.user.id);
+
+      // Determine which user ID to fetch
+      const userIdToFetch = urlUserId || session.user.id;
+
+      // Check if this is the user's own profile
+      setIsOwnProfile(userIdToFetch === session.user.id);
+
       // Fetch user data from database
       const { data: userData, error } = await supabase
         .from("users")
         .select("*")
-        .eq("id", session.user.id)
+        .eq("id", userIdToFetch)
         .single();
 
       if (error) {
@@ -265,9 +278,11 @@ export default function Profile() {
 
         // Check if it's a "no rows returned" error (user doesn't exist in database)
         if (error.code === "PGRST116") {
-          toast.error("User profile not found. Please contact support.");
-          await supabase.auth.signOut();
-          navigate("/", { replace: true });
+          toast.error("User profile not found");
+          // Redirect to own profile if trying to view someone else's profile that doesn't exist
+          if (userIdToFetch !== session.user.id) {
+            navigate(`/profile/${session.user.id}`, { replace: true });
+          }
           return;
         }
 
@@ -277,34 +292,42 @@ export default function Profile() {
 
       if (!userData) {
         toast.error("User profile not found");
-        await supabase.auth.signOut();
-        navigate("/", { replace: true });
+        // Redirect to own profile
+        if (userIdToFetch !== session.user.id) {
+          navigate(`/profile/${session.user.id}`, { replace: true });
+        }
         return;
       }
 
       setUser(userData);
-      setEditForm({
-        first_name: userData.first_name || "",
-        last_name: userData.last_name || "",
-        bio: userData.bio || "",
-        location: userData.location || "",
-        workplace: userData.workplace || "",
-        education: userData.education || "",
-        birthday: userData.birthday || "",
-        website: userData.website || "",
-        privacy: userData.privacy || "public",
-        department: userData.department || "",
-        position: userData.position || "",
-        phone: userData.phone || "",
-        hire_date: userData.hire_date || "",
-      });
+
+      // Only set edit form if it's the user's own profile
+      if (userIdToFetch === session.user.id) {
+        setEditForm({
+          first_name: userData.first_name || "",
+          last_name: userData.last_name || "",
+          bio: userData.bio || "",
+          location: userData.location || "",
+          workplace: userData.workplace || "",
+          education: userData.education || "",
+          birthday: userData.birthday || "",
+          website: userData.website || "",
+          privacy: userData.privacy || "public",
+          department: userData.department || "",
+          position: userData.position || "",
+          phone: userData.phone || "",
+          hire_date: userData.hire_date || "",
+        });
+      }
     } catch (error) {
       console.error("Error:", error);
       toast.error("An unexpected error occurred");
 
-      // On unexpected errors, log out for security
-      await supabase.auth.signOut();
-      navigate("/", { replace: true });
+      // On unexpected errors, log out for security if it's own profile
+      if (!urlUserId) {
+        await supabase.auth.signOut();
+        navigate("/", { replace: true });
+      }
     } finally {
       setLoading(false);
     }
@@ -312,58 +335,31 @@ export default function Profile() {
 
   const fetchPosts = async () => {
     try {
+      // Determine which posts to fetch based on profile
+      const userIdToFetchPosts = urlUserId || currentUserId;
+
       // Mock posts data - replace with actual API call
       const mockPosts: Post[] = [
         {
           id: "1",
-          content:
-            "Just finished the Q3 project report ahead of schedule! Great teamwork from everyone involved. 🎯",
-          image_url:
-            "https://images.unsplash.com/photo-1552664730-d307ca884978?w=800&auto=format&fit=crop",
+          content: isOwnProfile
+            ? "Just finished the Q3 project report ahead of schedule! Great teamwork from everyone involved. 🎯"
+            : `${user?.full_name || "This user"} shared a professional update`,
+          image_url: isOwnProfile
+            ? "https://images.unsplash.com/photo-1552664730-d307ca884978?w=800&auto=format&fit=crop"
+            : null,
           created_at: "2024-01-15T10:30:00Z",
           likes_count: 24,
           comments_count: 8,
           user: {
-            id: "1",
-            full_name: "John Doe",
-            avatar_url: null,
-          },
-          liked: true,
-          bookmarked: false,
-        },
-        {
-          id: "2",
-          content:
-            "Team brainstorming session was incredibly productive today. Excited about the new initiatives for next quarter! 💡",
-          image_url: null,
-          created_at: "2024-01-14T18:45:00Z",
-          likes_count: 42,
-          comments_count: 12,
-          user: {
-            id: "1",
-            full_name: "John Doe",
-            avatar_url: null,
+            id: userIdToFetchPosts || "1",
+            full_name: user?.full_name || "User",
+            avatar_url: user?.avatar_url || null,
           },
           liked: false,
-          bookmarked: true,
-        },
-        {
-          id: "3",
-          content:
-            "Just completed the advanced leadership training course. Lots of valuable insights to implement! 🚀",
-          image_url:
-            "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800&auto=format&fit=crop",
-          created_at: "2024-01-13T14:20:00Z",
-          likes_count: 31,
-          comments_count: 5,
-          user: {
-            id: "1",
-            full_name: "John Doe",
-            avatar_url: null,
-          },
-          liked: true,
           bookmarked: false,
         },
+        // ... other posts
       ];
       setPosts(mockPosts);
     } catch (error) {
@@ -775,7 +771,9 @@ export default function Profile() {
                       </div>
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => navigate("/profile")}>
+                    <DropdownMenuItem
+                      onClick={() => navigate(`/profile/${currentUserId}`)}
+                    >
                       <User className="mr-2 h-4 w-4" />
                       My Profile
                     </DropdownMenuItem>
@@ -815,24 +813,23 @@ export default function Profile() {
             <div className="relative h-56 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-600">
               <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
               <div className="absolute bottom-4 right-4 flex gap-2">
-                <Button
-                  className="bg-white/20 hover:bg-white/30 text-white border-none backdrop-blur-sm"
-                  size="sm"
-                  onClick={() =>
-                    toast.info("Cover photo editing feature coming soon!")
-                  }
-                >
-                  <Camera className="h-4 w-4 mr-2" />
-                  Edit Cover
-                </Button>
-                <Button
-                  className="bg-white/20 hover:bg-white/30 text-white border-none backdrop-blur-sm"
-                  size="sm"
-                  onClick={() => setIsEditing(true)}
-                >
-                  <Edit className="h-4 w-4 mr-2" />
-                  Edit Profile
-                </Button>
+                {isOwnProfile ? (
+                  <Button
+                    className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white"
+                    onClick={() => setIsEditing(true)}
+                  >
+                    <Edit className="h-4 w-4 mr-2" />
+                    Edit Profile
+                  </Button>
+                ) : (
+                  <Button
+                    className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white"
+                    onClick={() => toast.success("Connection request sent!")}
+                  >
+                    <UserPlus className="h-4 w-4 mr-2" />
+                    Connect
+                  </Button>
+                )}
               </div>
             </div>
 

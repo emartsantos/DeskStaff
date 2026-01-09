@@ -124,7 +124,7 @@ export default function Login() {
 
       // Redirect to the page they were trying to access or profile
       setTimeout(() => {
-        navigate("/profile", { replace: true });
+        navigate(`/profile/${data.user.id}`, { replace: true });
       }, 1000);
     } catch (error) {
       console.error("Login error:", error);
@@ -209,7 +209,7 @@ export default function Login() {
     formData.email.includes("@") && formData.password.length > 0;
 
   return (
-    <AuthChecker requireAuth={false} redirectTo="/profile">
+    <AuthChecker requireAuth={false} redirectTo="/profile/:userId">
       <AuthLayout
         illustration={loginIllustration}
         illustrationAlt="Login illustration"

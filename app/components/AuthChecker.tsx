@@ -6,18 +6,19 @@ import { Loader2 } from "lucide-react";
 
 interface AuthCheckerProps {
   children: React.ReactNode;
-  requireAuth?: boolean; // true = requires auth, false = redirects if auth, undefined = public page
-  redirectTo?: string; // where to redirect if auth check fails/passes
+  requireAuth?: boolean;
+  redirectTo?: string | ((userId: string) => string); // Allow function for dynamic redirect
 }
 
 export function AuthChecker({
   children,
   requireAuth = true,
-  redirectTo = "/login",
+  redirectTo = "/",
 }: AuthCheckerProps) {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
     checkAuth();
@@ -40,7 +41,7 @@ export function AuthChecker({
       if (requireAuth) {
         // Page requires authentication
         if (!hasSession) {
-          navigate(redirectTo, { replace: true });
+          navigate("/", { replace: true });
           return;
         }
 
@@ -54,15 +55,28 @@ export function AuthChecker({
         if (userError || !userData) {
           console.error("User not found in database:", userError);
           await supabase.auth.signOut();
-          navigate(redirectTo, { replace: true });
+          navigate("/", { replace: true });
           return;
         }
 
+        setUserId(session!.user.id);
         setIsAuthenticated(true);
       } else {
         // Page should NOT be accessible if authenticated (like login/register)
         if (hasSession) {
-          navigate(redirectTo || "/profile", { replace: true });
+          const userId = session.user.id;
+          let redirectPath = "/profile";
+
+          // Handle dynamic redirect
+          if (typeof redirectTo === "function") {
+            redirectPath = redirectTo(userId);
+          } else if (redirectTo.includes(":userId")) {
+            redirectPath = redirectTo.replace(":userId", userId);
+          } else {
+            redirectPath = `${redirectTo}/${userId}`;
+          }
+
+          navigate(redirectPath, { replace: true });
           return;
         }
         setIsAuthenticated(true);
@@ -70,7 +84,7 @@ export function AuthChecker({
     } catch (error) {
       console.error("Authentication error:", error);
       if (requireAuth) {
-        navigate(redirectTo, { replace: true });
+        navigate("/", { replace: true });
       }
     } finally {
       // Always show loading for at least 2 seconds
