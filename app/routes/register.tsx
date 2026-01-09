@@ -1,3 +1,4 @@
+// src/routes/register.tsx
 import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +29,9 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { supabase } from "@/lib/supabase";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { toast } from "sonner";
+import { AuthChecker } from "@/components/AuthChecker";
 
 type PasswordStrength = "weak" | "medium" | "strong" | "very-strong";
 
@@ -80,6 +84,7 @@ export default function Register() {
     user_id?: string;
   }>({ exists: false, email_verified: null });
   const [isGoogleLoading, setIsGoogleLoading] = React.useState(false);
+  const [isCheckingAuth, setIsCheckingAuth] = React.useState(true); // Add this line
 
   // List of disposable/temporary email domains
   const disposableEmailDomains = [
@@ -202,11 +207,11 @@ export default function Register() {
         }
 
         const existingAuthUser = authUsers?.users?.find(
-          (u) => u.email?.toLowerCase() === normalizedEmail
+          (u: any) => u.email?.toLowerCase() === normalizedEmail
         );
 
         const isGoogleUser = existingAuthUser?.identities?.some(
-          (id) => id.provider === "google"
+          (id: any) => id.provider === "google"
         );
 
         // Determine the final status
@@ -392,18 +397,16 @@ export default function Register() {
         // If user exists in our system, show appropriate message
         if (exists) {
           if (email_verified === true) {
-            setErrors({
-              submit:
-                "This email is already registered. Please log in instead.",
-            });
+            toast.error(
+              "This email is already registered. Please log in instead."
+            );
             setIsGoogleLoading(false);
             return;
           } else {
             // User exists but not verified - offer to resend verification
-            setErrors({
-              submit:
-                "This email is registered but not verified. Please check your email or use the resend verification option above.",
-            });
+            toast.error(
+              "This email is registered but not verified. Please check your email or use the resend verification option above."
+            );
             setIsGoogleLoading(false);
             return;
           }
@@ -418,7 +421,7 @@ export default function Register() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${siteUrl}/auth/google-callback`,
+          redirectTo: `${siteUrl}/auth/google`,
           queryParams: {
             access_type: "offline",
             prompt: "consent",
@@ -435,9 +438,9 @@ export default function Register() {
     } catch (error) {
       console.error("Google sign up error:", error);
       if (error instanceof Error) {
-        setErrors({ submit: error.message });
+        toast.error(error.message);
       } else {
-        setErrors({ submit: "Google sign up failed. Please try again." });
+        toast.error("Google sign up failed. Please try again.");
       }
       setIsGoogleLoading(false);
     }
@@ -511,10 +514,9 @@ export default function Register() {
 
       if (exists) {
         if (email_verified === true) {
-          setErrors({
-            submit:
-              "This email is already registered and verified. Please use a different email or try logging in.",
-          });
+          toast.error(
+            "This email is already registered and verified. Please use a different email or try logging in."
+          );
           return;
         } else if (email_verified === false) {
           // Email exists but not verified - redirect to verification page
@@ -672,6 +674,9 @@ export default function Register() {
       });
 
       // Redirect to auth/callback
+      toast.success(
+        "Registration successful! Please check your email to verify your account."
+      );
       navigate("/auth/callback", {
         state: {
           email: formData.email,
@@ -684,9 +689,9 @@ export default function Register() {
       console.error("Registration error:", error);
 
       if (error instanceof Error) {
-        setErrors({ submit: error.message });
+        toast.error(error.message);
       } else {
-        setErrors({ submit: "Registration failed. Please try again." });
+        toast.error("Registration failed. Please try again.");
       }
     } finally {
       setIsSubmitting(false);
@@ -717,6 +722,7 @@ export default function Register() {
       }
 
       // Navigate to callback page
+      toast.success("Verification email resent! Please check your inbox.");
       navigate("/auth/callback", {
         state: {
           email: formData.email,
@@ -725,9 +731,7 @@ export default function Register() {
       });
     } catch (error) {
       console.error("Error resending verification:", error);
-      setErrors({
-        submit: "Failed to resend verification email. Please try again.",
-      });
+      toast.error("Failed to resend verification email. Please try again.");
     }
   };
 
@@ -741,488 +745,491 @@ export default function Register() {
     formData.email.includes("@");
 
   return (
-    <AuthLayout
-      illustration={registerIllustration}
-      illustrationAlt="Registration illustration"
-      gradientFrom="from-blue-50"
-      gradientTo="to-indigo-100"
-    >
-      <div className="w-full max-w-md">
-        <div className="mb-8">
-          <h1 className="text-2xl font-semibold tracking-tight dark:text-white">
-            Create an Account
-          </h1>
-          <p className="text-sm text-muted-foreground dark:text-gray-400">
-            Join us today! Please enter your details.
-          </p>
-        </div>
-
-        {errors.submit && (
-          <Alert variant="destructive" className="mb-6">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{errors.submit}</AlertDescription>
-          </Alert>
-        )}
-
-        {/* Show special alert for unverified email */}
-        {emailStatus.exists && emailStatus.email_verified === false && (
-          <Alert className="mb-6 bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800">
-            <AlertTriangle className="h-4 w-4 text-amber-600" />
-            <AlertDescription className="text-amber-800 dark:text-amber-300">
-              <div className="flex flex-col gap-2">
-                <p>This email is registered but not verified.</p>
-                <Button
-                  onClick={handleResendVerification}
-                  size="sm"
-                  variant="outline"
-                  className="mt-2 border-amber-300 text-amber-700 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-900/30"
-                >
-                  <MailCheck className="h-4 w-4 mr-2" />
-                  Resend Verification Email
-                </Button>
-              </div>
-            </AlertDescription>
-          </Alert>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Name Fields */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="firstName" className="dark:text-gray-300">
-                First Name
-              </Label>
-              <Input
-                id="firstName"
-                type="text"
-                placeholder="John"
-                className={`dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400 ${
-                  errors.firstName ? "border-red-500 dark:border-red-500" : ""
-                }`}
-                value={formData.firstName}
-                onChange={handleChange}
-                disabled={isSubmitting}
-                required
-              />
-              {errors.firstName && (
-                <p className="text-xs text-red-500 flex items-center gap-1">
-                  <XCircle className="h-3 w-3" />
-                  {errors.firstName}
-                </p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="lastName" className="dark:text-gray-300">
-                Last Name
-              </Label>
-              <Input
-                id="lastName"
-                type="text"
-                placeholder="Doe"
-                className={`dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400 ${
-                  errors.lastName ? "border-red-500 dark:border-red-500" : ""
-                }`}
-                value={formData.lastName}
-                onChange={handleChange}
-                disabled={isSubmitting}
-                required
-              />
-              {errors.lastName && (
-                <p className="text-xs text-red-500 flex items-center gap-1">
-                  <XCircle className="h-3 w-3" />
-                  {errors.lastName}
-                </p>
-              )}
-            </div>
+    <AuthChecker requireAuth={false} redirectTo="/">
+      <AuthLayout
+        illustration={registerIllustration}
+        illustrationAlt="Registration illustration"
+        gradientFrom="from-blue-50"
+        gradientTo="to-indigo-100"
+      >
+        <div className="w-full max-w-md">
+          <div className="mb-8">
+            <h1 className="text-2xl font-semibold tracking-tight dark:text-white">
+              Create an Account
+            </h1>
+            <p className="text-sm text-muted-foreground dark:text-gray-400">
+              Join us today! Please enter your details.
+            </p>
           </div>
 
-          {/* Email Field */}
-          <div className="space-y-2">
-            <div className="flex justify-between items-center">
-              <Label htmlFor="email" className="dark:text-gray-300">
-                Email Address
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button type="button" className="ml-2">
-                        <Info className="h-3 w-3 text-muted-foreground" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="text-xs">
-                        Use a permanent email you have access to
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </Label>
-              <div className="flex items-center gap-2">
-                {isCheckingEmail && (
-                  <Loader2 className="h-3 w-3 animate-spin text-gray-500" />
-                )}
-                {emailStatus.exists &&
-                  !isCheckingEmail &&
-                  formData.email.includes("@") && (
-                    <div className="flex items-center gap-1 text-xs">
-                      {emailStatus.email_verified === true ? (
-                        <>
-                          <UserX className="h-3 w-3 text-red-500" />
-                          <span className="text-red-500">
-                            ✗ Email Already Exist
-                          </span>
-                        </>
-                      ) : emailStatus.email_verified === false ? (
-                        <>
-                          <ShieldAlert className="h-3 w-3 text-amber-500" />
-                          <span className="text-amber-500">
-                            ⚠️ Not Verified
-                          </span>
-                        </>
-                      ) : (
-                        <>
-                          <UserX className="h-3 w-3 text-red-500" />
-                          <span className="text-red-500">
-                            Already Registered
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  )}
-              </div>
-            </div>
+          {errors.submit && (
+            <Alert variant="destructive" className="mb-6">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{errors.submit}</AlertDescription>
+            </Alert>
+          )}
 
-            <div className="relative">
-              <Input
-                id="email"
-                type="email"
-                placeholder="you@example.com"
-                className={`dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400 pr-10 ${
-                  errors.email || emailStatus.exists
-                    ? "border-red-500 dark:border-red-500"
-                    : ""
-                }`}
-                value={formData.email}
-                onChange={handleChange}
-                disabled={isSubmitting}
-                required
-              />
-              <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                {errors.email || emailStatus.exists ? (
-                  <MailWarning className="h-4 w-4 text-red-500" />
-                ) : formData.email.includes("@") &&
-                  !errors.email &&
-                  !emailStatus.exists ? (
-                  <CheckCircle className="h-4 w-4 text-green-500" />
-                ) : null}
-              </div>
-            </div>
-
-            {/* Email Error */}
-            {errors.email && (
-              <p className="text-xs text-red-500 flex items-center gap-1">
-                <XCircle className="h-3 w-3" />
-                {errors.email}
-              </p>
-            )}
-          </div>
-
-          {/* Password Field */}
-          <div className="space-y-2">
-            <div className="flex justify-between items-center">
-              <Label htmlFor="password" className="dark:text-gray-300">
-                Password
-              </Label>
-              {formData.password && (
-                <div className="flex items-center gap-2">
-                  <div
-                    className={`h-2 w-12 rounded-full ${strengthIndicators[passwordStrength].color}`}
-                  />
-                  <span className="text-xs font-medium dark:text-gray-300">
-                    {strengthIndicators[passwordStrength].text}
-                  </span>
-                </div>
-              )}
-            </div>
-
-            <div className="relative">
-              <Input
-                id="password"
-                type={showPassword ? "text" : "password"}
-                placeholder="••••••••"
-                className={`dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400 pr-10 ${
-                  errors.password ? "border-red-500 dark:border-red-500" : ""
-                }`}
-                value={formData.password}
-                onChange={handleChange}
-                disabled={isSubmitting}
-                required
-              />
-              <button
-                type="button"
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 disabled:opacity-50"
-                onClick={() => setShowPassword(!showPassword)}
-                disabled={isSubmitting}
-              >
-                {showPassword ? (
-                  <EyeOff className="h-4 w-4" />
-                ) : (
-                  <Eye className="h-4 w-4" />
-                )}
-              </button>
-            </div>
-
-            {errors.password && (
-              <p className="text-xs text-red-500 flex items-center gap-1">
-                <XCircle className="h-3 w-3" />
-                {errors.password}
-              </p>
-            )}
-
-            {/* Password Requirements - Always visible */}
-            <div className="space-y-1 mt-2">
-              <p className="text-xs font-medium dark:text-gray-400">
-                Password must contain:
-              </p>
-              <div className="space-y-1">
-                {Object.entries(passwordRequirements).map(([key, met]) => {
-                  const labels: Record<string, string> = {
-                    length: "At least 8 characters",
-                    uppercase: "One uppercase letter (A-Z)",
-                    lowercase: "One lowercase letter (a-z)",
-                    number: "One number (0-9)",
-                    special: "One special character (!@#$%^&*)",
-                  };
-
-                  return (
-                    <div key={key} className="flex items-center gap-2">
-                      {met ? (
-                        <CheckCircle className="h-3 w-3 text-green-500" />
-                      ) : (
-                        <XCircle className="h-3 w-3 text-gray-400" />
-                      )}
-                      <span
-                        className={`text-xs ${met ? "text-green-600 dark:text-green-500" : "text-gray-500 dark:text-gray-400"}`}
-                      >
-                        {labels[key]}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-
-          {/* Confirm Password Field */}
-          <div className="space-y-2">
-            <div className="flex justify-between items-center">
-              <Label htmlFor="confirmPassword" className="dark:text-gray-300">
-                Confirm Password
-              </Label>
-              {formData.confirmPassword && (
-                <span
-                  className={`text-xs font-medium ${passwordsMatch ? "text-green-600 dark:text-green-500" : "text-red-500"}`}
-                >
-                  {passwordsMatch
-                    ? "✓ Passwords match"
-                    : "✗ Passwords don't match"}
-                </span>
-              )}
-            </div>
-
-            <div className="relative">
-              <Input
-                id="confirmPassword"
-                type={showConfirmPassword ? "text" : "password"}
-                placeholder="••••••••"
-                className={`dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400 pr-10 ${
-                  errors.confirmPassword
-                    ? "border-red-500 dark:border-red-500"
-                    : ""
-                }`}
-                value={formData.confirmPassword}
-                onChange={handleChange}
-                disabled={isSubmitting}
-                required
-              />
-              <button
-                type="button"
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 disabled:opacity-50"
-                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                disabled={isSubmitting}
-              >
-                {showConfirmPassword ? (
-                  <EyeOff className="h-4 w-4" />
-                ) : (
-                  <Eye className="h-4 w-4" />
-                )}
-              </button>
-            </div>
-
-            {errors.confirmPassword && (
-              <p className="text-xs text-red-500 flex items-center gap-1">
-                <XCircle className="h-3 w-3" />
-                {errors.confirmPassword}
-              </p>
-            )}
-          </div>
-
-          {/* Terms and Conditions */}
-          <div className="space-y-4">
-            <div
-              className={`space-y-2 rounded-lg ${errors.terms ? "bg-red-50 dark:bg-red-900/20" : ""}`}
-            >
-              <div className="flex items-center space-x-2">
-                <div className="flex-0 items-center">
-                  <Checkbox
-                    id="terms"
-                    checked={formData.terms}
-                    onCheckedChange={(checked) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        terms: checked as boolean,
-                      }))
-                    }
-                    className={`mt-1 dark:border-gray-600 dark:data-[state=checked]:bg-primary ${
-                      errors.terms ? "border-red-500 dark:border-red-500" : ""
-                    }`}
-                    disabled={isSubmitting}
-                  />
-                </div>
-
-                <div>
-                  <Label
-                    htmlFor="terms"
-                    className="font-normal dark:text-gray-400"
+          {/* Show special alert for unverified email */}
+          {emailStatus.exists && emailStatus.email_verified === false && (
+            <Alert className="mb-6 bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800">
+              <AlertTriangle className="h-4 w-4 text-amber-600" />
+              <AlertDescription className="text-amber-800 dark:text-amber-300">
+                <div className="flex flex-col gap-2">
+                  <p>This email is registered but not verified.</p>
+                  <Button
+                    onClick={handleResendVerification}
+                    size="sm"
+                    variant="outline"
+                    className="mt-2 border-amber-300 text-amber-700 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-900/30"
                   >
-                    I agree to the{" "}
-                    <Link
-                      to="/terms"
-                      className="text-primary hover:underline dark:text-primary-400"
-                      onClick={(e) => isSubmitting && e.preventDefault()}
-                    >
-                      Terms
-                    </Link>{" "}
-                    and{" "}
-                    <Link
-                      to="/privacy"
-                      className="text-primary hover:underline dark:text-primary-400"
-                      onClick={(e) => isSubmitting && e.preventDefault()}
-                    >
-                      Privacy Policy
-                    </Link>
-                  </Label>
-                  {errors.terms && (
-                    <p className="text-xs text-red-500 flex items-center gap-1 mt-1">
-                      <XCircle className="h-3 w-3" />
-                      {errors.terms}
-                    </p>
+                    <MailCheck className="h-4 w-4 mr-2" />
+                    Resend Verification Email
+                  </Button>
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Name Fields */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="firstName" className="dark:text-gray-300">
+                  First Name
+                </Label>
+                <Input
+                  id="firstName"
+                  type="text"
+                  placeholder="John"
+                  className={`dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400 ${
+                    errors.firstName ? "border-red-500 dark:border-red-500" : ""
+                  }`}
+                  value={formData.firstName}
+                  onChange={handleChange}
+                  disabled={isSubmitting}
+                  required
+                />
+                {errors.firstName && (
+                  <p className="text-xs text-red-500 flex items-center gap-1">
+                    <XCircle className="h-3 w-3" />
+                    {errors.firstName}
+                  </p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="lastName" className="dark:text-gray-300">
+                  Last Name
+                </Label>
+                <Input
+                  id="lastName"
+                  type="text"
+                  placeholder="Doe"
+                  className={`dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400 ${
+                    errors.lastName ? "border-red-500 dark:border-red-500" : ""
+                  }`}
+                  value={formData.lastName}
+                  onChange={handleChange}
+                  disabled={isSubmitting}
+                  required
+                />
+                {errors.lastName && (
+                  <p className="text-xs text-red-500 flex items-center gap-1">
+                    <XCircle className="h-3 w-3" />
+                    {errors.lastName}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Email Field */}
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <Label htmlFor="email" className="dark:text-gray-300">
+                  Email Address
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button type="button" className="ml-2">
+                          <Info className="h-3 w-3 text-muted-foreground" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="text-xs">
+                          Use a permanent email you have access to
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </Label>
+                <div className="flex items-center gap-2">
+                  {isCheckingEmail && (
+                    <Loader2 className="h-3 w-3 animate-spin text-gray-500" />
                   )}
+                  {emailStatus.exists &&
+                    !isCheckingEmail &&
+                    formData.email.includes("@") && (
+                      <div className="flex items-center gap-1 text-xs">
+                        {emailStatus.email_verified === true ? (
+                          <>
+                            <UserX className="h-3 w-3 text-red-500" />
+                            <span className="text-red-500">
+                              ✗ Email Already Exist
+                            </span>
+                          </>
+                        ) : emailStatus.email_verified === false ? (
+                          <>
+                            <ShieldAlert className="h-3 w-3 text-amber-500" />
+                            <span className="text-amber-500">
+                              ⚠️ Not Verified
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <UserX className="h-3 w-3 text-red-500" />
+                            <span className="text-red-500">
+                              Already Registered
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    )}
+                </div>
+              </div>
+
+              <div className="relative">
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="you@example.com"
+                  className={`dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400 pr-10 ${
+                    errors.email || emailStatus.exists
+                      ? "border-red-500 dark:border-red-500"
+                      : ""
+                  }`}
+                  value={formData.email}
+                  onChange={handleChange}
+                  disabled={isSubmitting}
+                  required
+                />
+                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                  {errors.email || emailStatus.exists ? (
+                    <MailWarning className="h-4 w-4 text-red-500" />
+                  ) : formData.email.includes("@") &&
+                    !errors.email &&
+                    !emailStatus.exists ? (
+                    <CheckCircle className="h-4 w-4 text-green-500" />
+                  ) : null}
+                </div>
+              </div>
+
+              {/* Email Error */}
+              {errors.email && (
+                <p className="text-xs text-red-500 flex items-center gap-1">
+                  <XCircle className="h-3 w-3" />
+                  {errors.email}
+                </p>
+              )}
+            </div>
+
+            {/* Password Field */}
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <Label htmlFor="password" className="dark:text-gray-300">
+                  Password
+                </Label>
+                {formData.password && (
+                  <div className="flex items-center gap-2">
+                    <div
+                      className={`h-2 w-12 rounded-full ${strengthIndicators[passwordStrength].color}`}
+                    />
+                    <span className="text-xs font-medium dark:text-gray-300">
+                      {strengthIndicators[passwordStrength].text}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="••••••••"
+                  className={`dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400 pr-10 ${
+                    errors.password ? "border-red-500 dark:border-red-500" : ""
+                  }`}
+                  value={formData.password}
+                  onChange={handleChange}
+                  disabled={isSubmitting}
+                  required
+                />
+                <button
+                  type="button"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 disabled:opacity-50"
+                  onClick={() => setShowPassword(!showPassword)}
+                  disabled={isSubmitting}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+
+              {errors.password && (
+                <p className="text-xs text-red-500 flex items-center gap-1">
+                  <XCircle className="h-3 w-3" />
+                  {errors.password}
+                </p>
+              )}
+
+              {/* Password Requirements - Always visible */}
+              <div className="space-y-1 mt-2">
+                <p className="text-xs font-medium dark:text-gray-400">
+                  Password must contain:
+                </p>
+                <div className="space-y-1">
+                  {Object.entries(passwordRequirements).map(([key, met]) => {
+                    const labels: Record<string, string> = {
+                      length: "At least 8 characters",
+                      uppercase: "One uppercase letter (A-Z)",
+                      lowercase: "One lowercase letter (a-z)",
+                      number: "One number (0-9)",
+                      special: "One special character (!@#$%^&*)",
+                    };
+
+                    return (
+                      <div key={key} className="flex items-center gap-2">
+                        {met ? (
+                          <CheckCircle className="h-3 w-3 text-green-500" />
+                        ) : (
+                          <XCircle className="h-3 w-3 text-gray-400" />
+                        )}
+                        <span
+                          className={`text-xs ${met ? "text-green-600 dark:text-green-500" : "text-gray-500 dark:text-gray-400"}`}
+                        >
+                          {labels[key]}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
 
-            {/* Newsletter Subscription */}
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="newsletter"
-                checked={formData.newsletter}
-                onCheckedChange={(checked) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    newsletter: checked as boolean,
-                  }))
-                }
-                className="mt-1 dark:border-gray-600 dark:data-[state=checked]:bg-primary"
-                disabled={isSubmitting}
-              />
-              <Label
-                htmlFor="newsletter"
-                className="font-normal dark:text-gray-400"
+            {/* Confirm Password Field */}
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <Label htmlFor="confirmPassword" className="dark:text-gray-300">
+                  Confirm Password
+                </Label>
+                {formData.confirmPassword && (
+                  <span
+                    className={`text-xs font-medium ${passwordsMatch ? "text-green-600 dark:text-green-500" : "text-red-500"}`}
+                  >
+                    {passwordsMatch
+                      ? "✓ Passwords match"
+                      : "✗ Passwords don't match"}
+                  </span>
+                )}
+              </div>
+
+              <div className="relative">
+                <Input
+                  id="confirmPassword"
+                  type={showConfirmPassword ? "text" : "password"}
+                  placeholder="••••••••"
+                  className={`dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400 pr-10 ${
+                    errors.confirmPassword
+                      ? "border-red-500 dark:border-red-500"
+                      : ""
+                  }`}
+                  value={formData.confirmPassword}
+                  onChange={handleChange}
+                  disabled={isSubmitting}
+                  required
+                />
+                <button
+                  type="button"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 disabled:opacity-50"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  disabled={isSubmitting}
+                >
+                  {showConfirmPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+
+              {errors.confirmPassword && (
+                <p className="text-xs text-red-500 flex items-center gap-1">
+                  <XCircle className="h-3 w-3" />
+                  {errors.confirmPassword}
+                </p>
+              )}
+            </div>
+
+            {/* Terms and Conditions */}
+            <div className="space-y-4">
+              <div
+                className={`space-y-2 rounded-lg ${errors.terms ? "bg-red-50 dark:bg-red-900/20" : ""}`}
               >
-                Subscribe to newsletter for updates and offers
-              </Label>
-            </div>
-          </div>
+                <div className="flex items-center space-x-2">
+                  <div className="flex-0 items-center">
+                    <Checkbox
+                      id="terms"
+                      checked={formData.terms}
+                      onCheckedChange={(checked) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          terms: checked as boolean,
+                        }))
+                      }
+                      className={`mt-1 dark:border-gray-600 dark:data-[state=checked]:bg-primary ${
+                        errors.terms ? "border-red-500 dark:border-red-500" : ""
+                      }`}
+                      disabled={isSubmitting}
+                    />
+                  </div>
 
-          {/* Submit Button */}
-          <Button
-            type="submit"
-            className="w-full"
-            size="lg"
-            disabled={isSubmitting || !canSubmit}
-          >
-            {isSubmitting ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                Creating Account...
-              </>
-            ) : (
-              "Create Account"
-            )}
-          </Button>
+                  <div>
+                    <Label
+                      htmlFor="terms"
+                      className="font-normal dark:text-gray-400"
+                    >
+                      I agree to the{" "}
+                      <Link
+                        to="/terms"
+                        className="text-primary hover:underline dark:text-primary-400"
+                        onClick={(e) => isSubmitting && e.preventDefault()}
+                      >
+                        Terms
+                      </Link>{" "}
+                      and{" "}
+                      <Link
+                        to="/privacy"
+                        className="text-primary hover:underline dark:text-primary-400"
+                        onClick={(e) => isSubmitting && e.preventDefault()}
+                      >
+                        Privacy Policy
+                      </Link>
+                    </Label>
+                    {errors.terms && (
+                      <p className="text-xs text-red-500 flex items-center gap-1 mt-1">
+                        <XCircle className="h-3 w-3" />
+                        {errors.terms}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
 
-          {/* Divider */}
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-border dark:border-gray-700"></div>
+              {/* Newsletter Subscription */}
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="newsletter"
+                  checked={formData.newsletter}
+                  onCheckedChange={(checked) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      newsletter: checked as boolean,
+                    }))
+                  }
+                  className="mt-1 dark:border-gray-600 dark:data-[state=checked]:bg-primary"
+                  disabled={isSubmitting}
+                />
+                <Label
+                  htmlFor="newsletter"
+                  className="font-normal dark:text-gray-400"
+                >
+                  Subscribe to newsletter for updates and offers
+                </Label>
+              </div>
             </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-card dark:bg-gray-800 px-2 text-muted-foreground dark:text-gray-400">
-                Or continue with
-              </span>
-            </div>
-          </div>
 
-          {/* Social Login Buttons */}
-          <div className="space-y-3">
+            {/* Submit Button */}
             <Button
-              type="button"
-              variant="outline"
+              type="submit"
+              className="w-full"
               size="lg"
-              className="w-full flex items-center gap-2 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
-              onClick={handleGoogleSignUp}
-              disabled={isSubmitting || isGoogleLoading}
+              disabled={isSubmitting || !canSubmit}
             >
-              {isGoogleLoading ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Creating Account...
+                </>
               ) : (
+                "Create Account"
+              )}
+            </Button>
+
+            {/* Divider */}
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-border dark:border-gray-700"></div>
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-card dark:bg-gray-800 px-2 text-muted-foreground dark:text-gray-400">
+                  Or continue with
+                </span>
+              </div>
+            </div>
+
+            {/* Social Login Buttons */}
+            <div className="space-y-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="lg"
+                className="w-full flex items-center gap-2 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
+                onClick={handleGoogleSignUp}
+                disabled={isSubmitting || isGoogleLoading}
+              >
+                {isGoogleLoading ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <img
+                    src="https://www.svgrepo.com/show/475656/google-color.svg"
+                    alt="Google"
+                    className="h-5 w-5"
+                  />
+                )}
+                {isGoogleLoading ? "Signing in..." : "Sign up with Google"}
+              </Button>
+
+              <Button
+                type="button"
+                variant="outline"
+                size="lg"
+                className="w-full flex items-center gap-2 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
+                disabled={isSubmitting}
+                onClick={() => toast.info("GitHub sign up coming soon!")}
+              >
                 <img
-                  src="https://www.svgrepo.com/show/475656/google-color.svg"
-                  alt="Google"
+                  src="https://www.svgrepo.com/show/475661/github-filled.svg"
+                  alt="GitHub"
                   className="h-5 w-5"
                 />
-              )}
-              {isGoogleLoading ? "Signing in..." : "Sign up with Google"}
-            </Button>
+                Sign up with GitHub
+              </Button>
+            </div>
+          </form>
 
-            <Button
-              type="button"
-              variant="outline"
-              size="lg"
-              className="w-full flex items-center gap-2 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
-              disabled={isSubmitting}
+          <p className="mt-8 text-center text-sm text-muted-foreground dark:text-gray-400">
+            Already have an account?{" "}
+            <Link
+              to="/"
+              className="text-primary font-medium hover:underline dark:text-primary-400"
+              onClick={(e) => isSubmitting && e.preventDefault()}
             >
-              <img
-                src="https://www.svgrepo.com/show/475661/github-filled.svg"
-                alt="GitHub"
-                className="h-5 w-5"
-              />
-              Sign up with GitHub
-            </Button>
-          </div>
-        </form>
-
-        <p className="mt-8 text-center text-sm text-muted-foreground dark:text-gray-400">
-          Already have an account?{" "}
-          <Link
-            to="/login"
-            className="text-primary font-medium hover:underline dark:text-primary-400"
-            onClick={(e) => isSubmitting && e.preventDefault()}
-          >
-            Sign in here
-          </Link>
-        </p>
-      </div>
-    </AuthLayout>
+              Sign in here
+            </Link>
+          </p>
+        </div>
+      </AuthLayout>
+    </AuthChecker>
   );
 }

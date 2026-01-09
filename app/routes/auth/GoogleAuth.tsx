@@ -65,7 +65,7 @@ export default function GoogleCallback() {
           }
 
           // Navigate to dashboard
-          navigate("/dashboard", {
+          navigate("/profile", {
             replace: true,
             state: { message: "Successfully logged in!" },
           });
