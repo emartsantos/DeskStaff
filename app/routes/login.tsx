@@ -57,6 +57,10 @@ export default function Login() {
     }
   };
 
+  React.useEffect(() => {
+    document.title = "DeskStaff - Login";
+  }, []); // The empty dependency array ensures this runs once when mounted
+
   // Validate form
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};

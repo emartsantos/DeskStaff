@@ -307,6 +307,10 @@ export default function Profile() {
   }, [currentUserId, isOwnProfile]);
 
   useEffect(() => {
+    document.title = "DeskStaff";
+  }, []); // The empty dependency array ensures this runs once when mounted
+
+  useEffect(() => {
     const userIdToSubscribe = urlUserId || currentUserId;
     if (!userIdToSubscribe) return;
 

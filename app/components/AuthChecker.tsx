@@ -38,13 +38,24 @@ export function AuthChecker({
 
       const hasSession = !!session;
 
-      if (requireAuth) {
-        // Page requires authentication
-        if (!hasSession) {
+      if (!hasSession) {
+        // No session at all - immediately redirect if auth is required
+        if (requireAuth) {
+          console.log("No session found, redirecting to login");
           navigate("/", { replace: true });
+          setIsLoading(false);
+          return;
+        } else {
+          // Public page, no session needed
+          setIsAuthenticated(true);
+          setIsLoading(false);
           return;
         }
+      }
 
+      // We have a session
+      if (requireAuth) {
+        // Page requires authentication
         // Verify user exists in database
         const { data: userData, error: userError } = await supabase
           .from("users")
@@ -56,6 +67,7 @@ export function AuthChecker({
           console.error("User not found in database:", userError);
           await supabase.auth.signOut();
           navigate("/", { replace: true });
+          setIsLoading(false);
           return;
         }
 
@@ -63,34 +75,34 @@ export function AuthChecker({
         setIsAuthenticated(true);
       } else {
         // Page should NOT be accessible if authenticated (like login/register)
-        if (hasSession) {
-          const userId = session.user.id;
-          let redirectPath = "/profile";
+        const userId = session.user.id;
+        let redirectPath = "/profile";
 
-          // Handle dynamic redirect
-          if (typeof redirectTo === "function") {
-            redirectPath = redirectTo(userId);
-          } else if (redirectTo.includes(":userId")) {
-            redirectPath = redirectTo.replace(":userId", userId);
-          } else {
-            redirectPath = `${redirectTo}/${userId}`;
-          }
-
-          navigate(redirectPath, { replace: true });
-          return;
+        // Handle dynamic redirect
+        if (typeof redirectTo === "function") {
+          redirectPath = redirectTo(userId);
+        } else if (redirectTo.includes(":userId")) {
+          redirectPath = redirectTo.replace(":userId", userId);
+        } else {
+          redirectPath = `${redirectTo}/${userId}`;
         }
-        setIsAuthenticated(true);
+
+        navigate(redirectPath, { replace: true });
+        setIsLoading(false);
+        return;
       }
     } catch (error) {
       console.error("Authentication error:", error);
       if (requireAuth) {
         navigate("/", { replace: true });
       }
+      setIsLoading(false);
+      return;
     } finally {
-      // Always show loading for at least 2 seconds
+      // Always show loading for at least 1 second (reduced from 2 seconds)
       setTimeout(() => {
         setIsLoading(false);
-      }, 2000);
+      }, 1000);
     }
   };
 
@@ -103,7 +115,9 @@ export function AuthChecker({
   }
 
   if (!isAuthenticated) {
-    return null; // Will redirect in the effect
+    // Don't render anything if not authenticated
+    // The navigation should have already happened
+    return null;
   }
 
   return <>{children}</>;

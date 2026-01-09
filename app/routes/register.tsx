@@ -373,6 +373,10 @@ export default function Register() {
   };
 
   React.useEffect(() => {
+    document.title = "DeskStaff - Register";
+  }, []); // The empty dependency array ensures this runs once when mounted
+
+  React.useEffect(() => {
     return () => {
       if (debouncedEmailCheck.current) {
         clearTimeout(debouncedEmailCheck.current);
@@ -745,7 +749,7 @@ export default function Register() {
     formData.email.includes("@");
 
   return (
-    <AuthChecker requireAuth={false} redirectTo="/">
+    <AuthChecker requireAuth={false} redirectTo="/profile/:userId">
       <AuthLayout
         illustration={registerIllustration}
         illustrationAlt="Registration illustration"
