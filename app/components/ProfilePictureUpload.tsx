@@ -1,10 +1,11 @@
 // src/components/ProfilePictureUpload.tsx
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Loader2, Camera, X, Check } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/lib/supabase";
+import { supabase, bustGlobalCache } from "@/lib/supabase";
+import { useGlobalCacheBust } from "@/hooks/useGlobalCacheBust";
 
 interface ProfilePictureUploadProps {
   userId: string;
@@ -28,6 +29,9 @@ export function ProfilePictureUpload({
   const [isUploading, setIsUploading] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
+  const [localImageKey, setLocalImageKey] = useState(Date.now());
+
+  const { getBustedUrl, version } = useGlobalCacheBust();
 
   const sizeClasses = {
     xs: "h-8 w-8",
@@ -43,6 +47,38 @@ export function ProfilePictureUpload({
     md: "h-5 w-5",
     lg: "h-6 w-6",
     xl: "h-8 w-8",
+  };
+
+  // Force image refresh when global cache bust version changes
+  useEffect(() => {
+    setLocalImageKey(Date.now());
+  }, [version]);
+
+  const forceImageRefresh = async (url: string): Promise<string> => {
+    try {
+      const response = await fetch(url, {
+        headers: {
+          "Cache-Control": "no-cache",
+          Pragma: "no-cache",
+        },
+        cache: "no-store",
+      });
+
+      if (response.ok) {
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+
+        setTimeout(() => {
+          URL.revokeObjectURL(blobUrl);
+        }, 3000);
+
+        return blobUrl;
+      }
+    } catch (error) {
+      console.warn("Could not force refresh image:", error);
+    }
+
+    return getBustedUrl(url);
   };
 
   const uploadAvatar = async (file: File) => {
@@ -65,57 +101,81 @@ export function ProfilePictureUpload({
     setUploadSuccess(false);
 
     try {
-      // Delete old avatar if exists
-      if (currentAvatarUrl && currentAvatarUrl.includes("supabase.co")) {
-        try {
-          const oldFileName = currentAvatarUrl.split("/").pop();
-          if (oldFileName) {
-            await supabase.storage
-              .from("avatars")
-              .remove([`${userId}/${oldFileName}`]);
-          }
-        } catch (deleteError) {
-          console.warn("Could not delete old avatar:", deleteError);
-          // Continue with upload even if delete fails
-        }
-      }
-
-      // Upload new avatar
-      const fileExt = file.name.split(".").pop();
-      const fileName = `${Date.now()}.${fileExt}`;
+      const fileExt = file.name.split(".").pop()?.toLowerCase();
+      const timestamp = Date.now();
+      const randomStr = Math.random().toString(36).substring(2, 10);
+      const fileName = `${timestamp}_${randomStr}.${fileExt}`;
       const filePath = `${userId}/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
         .from("avatars")
         .upload(filePath, file, {
-          cacheControl: "3600",
-          upsert: true,
+          cacheControl: "0",
+          upsert: false,
+          contentType: file.type,
         });
 
       if (uploadError) {
         throw uploadError;
       }
 
-      // Get public URL
       const {
         data: { publicUrl },
       } = supabase.storage.from("avatars").getPublicUrl(filePath);
 
-      // Update user profile with new avatar URL
+      const immediateUrl = `${publicUrl}?_=${timestamp}&cb=${Date.now()}`;
+
       const { error: updateError } = await supabase
         .from("users")
-        .update({ avatar_url: publicUrl })
+        .update({
+          avatar_url: immediateUrl,
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", userId);
 
       if (updateError) {
+        await supabase.storage.from("avatars").remove([filePath]);
         throw updateError;
       }
 
-      // Callback with new URL
-      onUploadComplete(publicUrl);
+      // Bust global cache
+      bustGlobalCache();
+
+      // Force local image key update
+      setLocalImageKey(Date.now());
+
+      let finalUrl = immediateUrl;
+      try {
+        const refreshedUrl = await forceImageRefresh(immediateUrl);
+        finalUrl = refreshedUrl;
+      } catch (error) {
+        console.warn("Using regular URL for image:", error);
+      }
+
+      onUploadComplete(finalUrl);
       setUploadSuccess(true);
 
-      // Reset success state after 2 seconds
+      // Cleanup old avatars in background
+      setTimeout(async () => {
+        try {
+          const { data: oldFiles } = await supabase.storage
+            .from("avatars")
+            .list(userId);
+
+          if (oldFiles) {
+            const filesToDelete = oldFiles
+              .filter((f) => f.name !== fileName)
+              .map((f) => `${userId}/${f.name}`);
+
+            if (filesToDelete.length > 0) {
+              await supabase.storage.from("avatars").remove(filesToDelete);
+            }
+          }
+        } catch (error) {
+          console.warn("Failed to cleanup old avatars:", error);
+        }
+      }, 2000);
+
       setTimeout(() => setUploadSuccess(false), 2000);
 
       if (!compact) {
@@ -134,35 +194,38 @@ export function ProfilePictureUpload({
     if (file) {
       await uploadAvatar(file);
     }
-    // Reset input
     e.target.value = "";
   };
 
   const handleRemoveAvatar = async () => {
-    if (!userId || !currentAvatarUrl) return;
+    if (!userId) return;
 
     setIsUploading(true);
 
     try {
-      // Delete from storage
-      if (currentAvatarUrl.includes("supabase.co")) {
-        const fileName = currentAvatarUrl.split("/").pop();
-        if (fileName) {
-          await supabase.storage
-            .from("avatars")
-            .remove([`${userId}/${fileName}`]);
-        }
+      const { data: files } = await supabase.storage
+        .from("avatars")
+        .list(userId);
+
+      if (files && files.length > 0) {
+        const filesToDelete = files.map((f) => `${userId}/${f.name}`);
+        await supabase.storage.from("avatars").remove(filesToDelete);
       }
 
-      // Update user profile
       const { error } = await supabase
         .from("users")
-        .update({ avatar_url: null })
+        .update({
+          avatar_url: null,
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", userId);
 
       if (error) throw error;
 
-      // Callback with empty URL
+      // Bust global cache on removal too
+      bustGlobalCache();
+      setLocalImageKey(Date.now());
+
       onUploadComplete("");
       toast.success("Profile picture removed");
     } catch (error: any) {
@@ -176,6 +239,9 @@ export function ProfilePictureUpload({
   const getAvatarInitials = () => {
     return "U";
   };
+
+  const avatarUrl = currentAvatarUrl ? getBustedUrl(currentAvatarUrl) : null;
+  const imageKey = `${avatarUrl || ""}_${localImageKey}_${version}`;
 
   if (compact) {
     return (
@@ -191,11 +257,18 @@ export function ProfilePictureUpload({
           <Avatar
             className={`${sizeClasses[size]} border-2 border-transparent hover:border-blue-500 transition-all duration-200`}
           >
-            {currentAvatarUrl && !isUploading ? (
+            {avatarUrl && !isUploading ? (
               <AvatarImage
-                src={`${currentAvatarUrl}?t=${Date.now()}`}
+                src={avatarUrl}
                 alt="Profile"
                 className="object-cover"
+                key={imageKey}
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  if (currentAvatarUrl && target.src !== currentAvatarUrl) {
+                    target.src = getBustedUrl(currentAvatarUrl);
+                  }
+                }}
               />
             ) : null}
             <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white">
@@ -222,11 +295,18 @@ export function ProfilePictureUpload({
         onMouseEnter={() => editable && setIsHovering(true)}
         onMouseLeave={() => setIsHovering(false)}
       >
-        {currentAvatarUrl && !isUploading ? (
+        {avatarUrl && !isUploading ? (
           <AvatarImage
-            src={`${currentAvatarUrl}?t=${Date.now()}`}
+            src={avatarUrl}
             alt="Profile"
             className="object-cover"
+            key={imageKey}
+            onError={(e) => {
+              const target = e.target as HTMLImageElement;
+              if (currentAvatarUrl && target.src !== currentAvatarUrl) {
+                target.src = getBustedUrl(currentAvatarUrl);
+              }
+            }}
           />
         ) : null}
         <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white">
@@ -242,7 +322,6 @@ export function ProfilePictureUpload({
 
       {editable && (
         <>
-          {/* Upload Button */}
           <label
             className={`absolute inset-0 flex items-center justify-center bg-black/40 rounded-full cursor-pointer transition-all duration-200 ${
               isHovering ? "opacity-100" : "opacity-0"
@@ -267,7 +346,6 @@ export function ProfilePictureUpload({
             </div>
           </label>
 
-          {/* Remove Button (only if has avatar) */}
           {currentAvatarUrl && showRemoveButton && !isUploading && (
             <Button
               type="button"
@@ -287,7 +365,6 @@ export function ProfilePictureUpload({
         </>
       )}
 
-      {/* Progress Indicator */}
       {isUploading && (
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/20 rounded-full" />
