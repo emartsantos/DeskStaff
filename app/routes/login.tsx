@@ -115,6 +115,23 @@ export default function Login() {
         throw new Error("Login failed. Please try again.");
       }
 
+      // Update user as logged in
+      try {
+        const { error: updateError } = await supabase
+          .from("users")
+          .update({
+            logged_in: true,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", data.user.id);
+
+        if (updateError) {
+          console.error("Error updating login status:", updateError);
+        }
+      } catch (updateError) {
+        console.error("Error updating login status:", updateError);
+      }
+
       // Store remember me preference
       if (formData.rememberMe && typeof window !== "undefined") {
         localStorage.setItem("rememberMe", "true");

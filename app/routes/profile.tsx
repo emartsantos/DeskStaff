@@ -105,6 +105,8 @@ interface UserProfile {
   phone?: string;
   hire_date?: string;
   skills?: string[];
+  logged_in?: boolean; // Add this
+  last_seen?: string; // Optional: track last activity
 }
 
 interface Post {
@@ -197,17 +199,16 @@ export default function Profile() {
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log("Auth state changed:", event, session);
 
-      if (event === "SIGNED_OUT") {
-        // Clear all state when signed out
-        setUser(null);
-        setPosts([]);
-        setFriends([]);
-        navigate("/", { replace: true });
-      } else if (event === "TOKEN_REFRESHED") {
-        console.log("Token refreshed");
-      } else if (event === "USER_UPDATED") {
-        console.log("User updated");
+      if (event === "SIGNED_IN" && session?.user) {
+        // User just logged in
+        try {
+          await updateUserLoginStatus(true);
+        } catch (error) {
+          console.error("Error setting online status:", error);
+        }
       }
+      // REMOVE the SIGNED_OUT handler here since handleLogout handles it
+      // This prevents duplicate logout attempts
     });
 
     // Clean up listener
@@ -215,6 +216,51 @@ export default function Profile() {
       subscription.unsubscribe();
     };
   }, [navigate]);
+
+  // Keep user online while active on the page
+  useEffect(() => {
+    if (!currentUserId || !isOwnProfile) return;
+
+    const activityEvents = ["mousedown", "keydown", "scroll", "touchstart"];
+    let activityTimeout: NodeJS.Timeout;
+
+    const updateActivity = async () => {
+      await setUserOnline();
+      clearTimeout(activityTimeout);
+
+      // Set timeout to mark user as offline after 5 minutes of inactivity
+      activityTimeout = setTimeout(
+        async () => {
+          if (isOwnProfile) {
+            await setUserOffline();
+            console.log("User marked as offline due to inactivity");
+          }
+        },
+        5 * 60 * 1000
+      ); // 5 minutes
+    };
+
+    // Add event listeners for user activity
+    activityEvents.forEach((event) => {
+      window.addEventListener(event, updateActivity);
+    });
+
+    // Initial activity update
+    updateActivity();
+
+    // Clean up
+    return () => {
+      activityEvents.forEach((event) => {
+        window.removeEventListener(event, updateActivity);
+      });
+      clearTimeout(activityTimeout);
+
+      // Mark as offline when component unmounts (if it's user's own profile)
+      if (isOwnProfile) {
+        setUserOffline();
+      }
+    };
+  }, [currentUserId, isOwnProfile]);
 
   useEffect(() => {
     const userIdToSubscribe = urlUserId || currentUserId;
@@ -242,6 +288,68 @@ export default function Profile() {
     };
   }, [urlUserId, currentUserId]); // Update dependency array
 
+  // Function to update user's logged_in status in database
+  // Function to update user's logged_in status in database
+  const updateUserLoginStatus = async (isLoggedIn: boolean): Promise<void> => {
+    try {
+      const {
+        data: { user: authUser },
+        error: authError,
+      } = await supabase.auth.getUser();
+
+      if (authError || !authUser) {
+        console.log("No authenticated user found or auth error:", authError);
+        return;
+      }
+
+      console.log(`Updating user ${authUser.id} logged_in to: ${isLoggedIn}`);
+
+      // Use a timeout to prevent hanging requests
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+
+      const { error } = await supabase
+        .from("users")
+        .update({
+          logged_in: isLoggedIn,
+          updated_at: new Date().toISOString(),
+          ...(!isLoggedIn ? { last_seen: new Date().toISOString() } : {}),
+        })
+        .eq("id", authUser.id);
+
+      clearTimeout(timeoutId);
+
+      if (error) {
+        // Don't show error if it's an abort error during logout
+        if (
+          error.message.includes("aborted") ||
+          error.message.includes("AbortError")
+        ) {
+          console.log("Update aborted (expected during logout)");
+        } else {
+          console.error("Error updating login status:", error);
+        }
+      } else {
+        console.log(
+          `User ${isLoggedIn ? "logged in" : "logged out"} status updated successfully`
+        );
+      }
+    } catch (error: any) {
+      // Catch and handle abort errors gracefully
+      if (error.name === "AbortError" || error.message?.includes("aborted")) {
+        console.log("Request was aborted (expected during navigation)");
+        return;
+      }
+      console.error("Error in updateUserLoginStatus:", error);
+    }
+  };
+
+  // Function to set user as online
+  const setUserOnline = () => updateUserLoginStatus(true);
+
+  // Function to set user as offline
+  const setUserOffline = () => updateUserLoginStatus(false);
+
   const fetchUserData = async () => {
     try {
       // First check session
@@ -260,6 +368,9 @@ export default function Profile() {
       // Set current user ID from session
       setCurrentUserId(session.user.id);
 
+      // Update user as online immediately
+      await setUserOnline();
+
       // Determine which user ID to fetch
       const userIdToFetch = urlUserId || session.user.id;
 
@@ -273,61 +384,10 @@ export default function Profile() {
         .eq("id", userIdToFetch)
         .single();
 
-      if (error) {
-        console.error("Error fetching user data:", error);
-
-        // Check if it's a "no rows returned" error (user doesn't exist in database)
-        if (error.code === "PGRST116") {
-          toast.error("User profile not found");
-          // Redirect to own profile if trying to view someone else's profile that doesn't exist
-          if (userIdToFetch !== session.user.id) {
-            navigate(`/profile/${session.user.id}`, { replace: true });
-          }
-          return;
-        }
-
-        toast.error("Failed to load profile data");
-        return;
-      }
-
-      if (!userData) {
-        toast.error("User profile not found");
-        // Redirect to own profile
-        if (userIdToFetch !== session.user.id) {
-          navigate(`/profile/${session.user.id}`, { replace: true });
-        }
-        return;
-      }
-
-      setUser(userData);
-
-      // Only set edit form if it's the user's own profile
-      if (userIdToFetch === session.user.id) {
-        setEditForm({
-          first_name: userData.first_name || "",
-          last_name: userData.last_name || "",
-          bio: userData.bio || "",
-          location: userData.location || "",
-          workplace: userData.workplace || "",
-          education: userData.education || "",
-          birthday: userData.birthday || "",
-          website: userData.website || "",
-          privacy: userData.privacy || "public",
-          department: userData.department || "",
-          position: userData.position || "",
-          phone: userData.phone || "",
-          hire_date: userData.hire_date || "",
-        });
-      }
+      // ... rest of your fetchUserData function
     } catch (error) {
       console.error("Error:", error);
       toast.error("An unexpected error occurred");
-
-      // On unexpected errors, log out for security if it's own profile
-      if (!urlUserId) {
-        await supabase.auth.signOut();
-        navigate("/", { replace: true });
-      }
     } finally {
       setLoading(false);
     }
@@ -369,7 +429,7 @@ export default function Profile() {
 
   const fetchFriends = async () => {
     try {
-      // Mock friends data - replace with actual API call
+      // Mock friends data - now with logged_in status
       const mockFriends: Friend[] = [
         {
           id: "2",
@@ -379,6 +439,7 @@ export default function Profile() {
           status: "accepted",
           department: "Engineering",
           position: "Senior Developer",
+          logged_in: true, // Online
         },
         {
           id: "3",
@@ -388,25 +449,9 @@ export default function Profile() {
           status: "accepted",
           department: "Marketing",
           position: "Marketing Manager",
+          logged_in: false, // Offline
         },
-        {
-          id: "4",
-          full_name: "Alice Williams",
-          avatar_url: null,
-          mutual_friends: 5,
-          status: "pending",
-          department: "HR",
-          position: "HR Specialist",
-        },
-        {
-          id: "5",
-          full_name: "Charlie Brown",
-          avatar_url: null,
-          mutual_friends: 3,
-          status: "requested",
-          department: "Finance",
-          position: "Financial Analyst",
-        },
+        // ... other friends
       ];
       setFriends(mockFriends);
     } catch (error) {
@@ -414,33 +459,158 @@ export default function Profile() {
     }
   };
 
-  const handleLogout = async () => {
+  // Add this debug function to test
+  const testLoginStatusUpdate = async () => {
     try {
-      // Clear local state first
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error("No user found");
+        return;
+      }
+
+      toast.loading("Testing login status update...");
+
+      // Test update
+      const { data, error } = await supabase
+        .from("users")
+        .update({
+          logged_in: false,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", user.id)
+        .select("id, logged_in, updated_at");
+
+      if (error) {
+        toast.error(`Update failed: ${error.message}`);
+        console.error("Test error details:", error);
+      } else {
+        toast.success(`Update successful! Status: ${data?.[0]?.logged_in}`);
+        console.log("Test result:", data);
+      }
+    } catch (error) {
+      toast.error("Test failed");
+      console.error("Test error:", error);
+    }
+  };
+
+  // Add a test button to your UI temporarily
+  <Button
+    variant="outline"
+    size="sm"
+    onClick={testLoginStatusUpdate}
+    className="mb-2"
+  >
+    Test Login Status Update
+  </Button>;
+
+  const handleLogout = async () => {
+    setIsLogoutDialogOpen(false);
+
+    // Set a flag to prevent navigation until DB update is done
+    let dbUpdateComplete = false;
+
+    // Override beforeunload to wait for DB update
+    const beforeUnloadHandler = (e: BeforeUnloadEvent) => {
+      if (!dbUpdateComplete) {
+        e.preventDefault();
+        e.returnValue = "Please wait, logging out...";
+        return "Please wait, logging out...";
+      }
+    };
+
+    window.addEventListener("beforeunload", beforeUnloadHandler);
+
+    try {
+      toast.loading("Logging out...");
+
+      // Get user
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (user) {
+        // Update database with retry logic
+        await updateDatabaseWithRetry(user.id);
+      }
+
+      // Mark DB update as complete
+      dbUpdateComplete = true;
+
+      // Remove the beforeunload listener
+      window.removeEventListener("beforeunload", beforeUnloadHandler);
+
+      // Sign out
+      await supabase.auth.signOut();
+
+      // Clear state
       setUser(null);
       setPosts([]);
       setFriends([]);
 
-      // Sign out from Supabase
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        console.error("Supabase sign out error:", error);
-        toast.error("Failed to log out properly");
-        return;
-      }
+      toast.dismiss();
+      toast.success("Logged out!");
 
-      toast.success("You have been successfully logged out");
-
-      // Use a small delay to ensure toast is visible
-      setTimeout(() => {
-        navigate("/", { replace: true });
-        window.location.href = "/";
-      }, 500);
+      // Navigate
+      navigate("/", { replace: true });
     } catch (error) {
-      console.error("Error logging out:", error);
-      toast.error("Failed to log out");
-    } finally {
-      setIsLogoutDialogOpen(false);
+      console.error("Logout error:", error);
+      toast.dismiss();
+      toast.error("Logout failed");
+      window.removeEventListener("beforeunload", beforeUnloadHandler);
+      navigate("/", { replace: true });
+    }
+  };
+
+  const updateDatabaseWithRetry = async (
+    userId: string,
+    retries = 3
+  ): Promise<void> => {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        console.log(`Attempt ${attempt} to update database...`);
+
+        const { error, status } = await supabase
+          .from("users")
+          .update({
+            logged_in: false,
+            last_seen: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", userId);
+
+        if (error) throw error;
+
+        console.log(
+          `✅ Database updated on attempt ${attempt}, status: ${status}`
+        );
+
+        // Verify the update
+        const { data } = await supabase
+          .from("users")
+          .select("logged_in")
+          .eq("id", userId)
+          .maybeSingle();
+
+        if (data && data.logged_in === false) {
+          console.log("✅ Verification passed: logged_in is FALSE");
+          return;
+        } else {
+          throw new Error("Verification failed");
+        }
+      } catch (error) {
+        console.error(`Attempt ${attempt} failed:`, error);
+
+        if (attempt === retries) {
+          throw new Error(
+            `Failed to update database after ${retries} attempts`
+          );
+        }
+
+        // Wait before retry
+        await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+      }
     }
   };
 
@@ -1110,49 +1280,24 @@ export default function Profile() {
                       >
                         <div className="relative">
                           <Avatar className="h-20 w-full rounded-xl border-2 border-transparent group-hover:border-blue-500 transition-all">
-                            <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white">
+                            <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white relative">
                               {friend.full_name
                                 .split(" ")
                                 .map((n) => n[0])
                                 .join("")}
+                              {/* Online status indicator */}
+                              {friend.logged_in && (
+                                <div className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-green-500 border-2 border-white dark:border-gray-800"></div>
+                              )}
                             </AvatarFallback>
                           </Avatar>
-                          {friend.status === "pending" && (
-                            <div className="absolute -top-1 -right-1">
-                              <div className="flex gap-1">
-                                <Button
-                                  size="icon"
-                                  className="h-6 w-6 bg-green-500 hover:bg-green-600"
-                                  onClick={() =>
-                                    handleFriendRequest(friend.id, "accept")
-                                  }
-                                >
-                                  <Check className="h-3 w-3" />
-                                </Button>
-                                <Button
-                                  size="icon"
-                                  className="h-6 w-6 bg-red-500 hover:bg-red-600"
-                                  onClick={() =>
-                                    handleFriendRequest(friend.id, "reject")
-                                  }
-                                >
-                                  <X className="h-3 w-3" />
-                                </Button>
-                              </div>
-                            </div>
-                          )}
                         </div>
                         <div className="space-y-1">
                           <p className="text-xs font-semibold truncate">
                             {friend.full_name}
-                          </p>
-                          {friend.position && (
-                            <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                              {friend.position}
-                            </p>
-                          )}
-                          <p className="text-xs text-gray-400 dark:text-gray-500">
-                            {friend.mutual_friends} mutual
+                            {friend.logged_in && (
+                              <span className="ml-1 text-green-500">●</span>
+                            )}
                           </p>
                         </div>
                       </div>
