@@ -1098,10 +1098,12 @@ export default function Profile() {
                       className="relative h-9 w-9 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
                     >
                       <Avatar className="h-9 w-9 ring-2 ring-white dark:ring-gray-700">
-                        <AvatarImage src={user?.avatar_url || undefined} />
+                        <AvatarImage
+                          src={currentUserId?.avatar_url || undefined}
+                        />
                         <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white">
-                          {user?.first_name?.[0]}
-                          {user?.last_name?.[0]}
+                          {currentUserId?.first_name?.[0]}
+                          {currentUserId?.last_name?.[0]}
                         </AvatarFallback>
                       </Avatar>
                     </Button>
