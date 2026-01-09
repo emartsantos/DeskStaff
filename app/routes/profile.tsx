@@ -1,10 +1,10 @@
 // src/routes/profile.tsx
 import { useState, useEffect } from "react";
-import { useNavigate, Link, useParams } from "react-router";
+import { useNavigate, useParams } from "react-router";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Card,
   CardContent,
@@ -19,7 +19,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -30,65 +29,45 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+
+// Import reusable components
+import { Header } from "@/components/Header";
+import { CreatePost } from "@/components/CreatePost";
+import { Post } from "@/components/Post";
+import { UserInfoCard } from "@/components/UserInfoCard";
+
 import {
   LogOut,
-  User,
   Settings,
-  Bell,
-  Calendar,
-  MapPin,
   Briefcase,
-  School,
   Edit,
-  Camera,
   MoreHorizontal,
   Heart,
   MessageSquare,
-  Share2,
   Bookmark,
   Globe,
   Lock,
   Users,
   Image as ImageIcon,
   Video,
-  Smile,
-  Send,
-  Home,
-  Search,
-  MessageCircle,
   UserPlus,
-  Check,
-  X,
   Loader2,
-  Shield,
-  Key,
   Trash2,
   Eye,
   EyeOff,
-  Building,
-  Mail,
-  Phone,
-  Globe as GlobeIcon,
-  FileText,
-  Award,
   CalendarDays,
   Clock,
-  TrendingUp,
+  Award,
+  FileText,
   Users as UsersIcon,
-  BriefcaseBusiness,
-  Sun,
-  Moon,
 } from "lucide-react";
-
-// Add ThemeToggle component import
-import { useTheme } from "@/context/ThemeProvider";
+import { ProfilePictureUpload } from "@/components/ProfilePictureUpload";
 
 interface UserProfile {
   id: string;
@@ -110,24 +89,8 @@ interface UserProfile {
   phone?: string;
   hire_date?: string;
   skills?: string[];
-  logged_in?: boolean; // Add this
-  last_seen?: string; // Optional: track last activity
-}
-
-interface Post {
-  id: string;
-  content: string;
-  image_url: string | null;
-  created_at: string;
-  likes_count: number;
-  comments_count: number;
-  user: {
-    id: string;
-    full_name: string;
-    avatar_url: string | null;
-  };
-  liked: boolean;
-  bookmarked: boolean;
+  logged_in?: boolean;
+  last_seen?: string;
 }
 
 interface Friend {
@@ -144,10 +107,11 @@ interface Friend {
 export default function Profile() {
   const navigate = useNavigate();
   const { userId: urlUserId } = useParams();
-  const [user, setUser] = useState<UserProfile | null>(null);
+  const [loggedInUser, setLoggedInUser] = useState<UserProfile | null>(null);
+  const [viewedUser, setViewedUser] = useState<UserProfile | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [posts, setPosts] = useState<Post[]>([]);
+  const [posts, setPosts] = useState<any[]>([]);
   const [friends, setFriends] = useState<Friend[]>([]);
   const [activeTab, setActiveTab] = useState("posts");
   const [isEditing, setIsEditing] = useState(false);
@@ -184,34 +148,6 @@ export default function Profile() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
 
-  // New post state
-  const [newPost, setNewPost] = useState("");
-  const [isPosting, setIsPosting] = useState(false);
-  const [selectedImage, setSelectedImage] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
-
-  // Add theme hook
-  const { theme, toggleTheme } = useTheme();
-
-  // Add ThemeToggle component inline since it's not imported
-  const ThemeToggle = () => {
-    return (
-      <Button
-        variant="outline"
-        size="icon"
-        onClick={toggleTheme}
-        className="rounded-full w-10 h-10 backdrop-blur-sm bg-white/70 dark:bg-gray-800/70 hover:scale-105 transition-transform border-gray-300 dark:border-gray-600"
-        aria-label="Toggle theme"
-      >
-        {theme === "dark" ? (
-          <Sun className="h-5 w-5 text-yellow-500" />
-        ) : (
-          <Moon className="h-5 w-5 text-gray-700" />
-        )}
-      </Button>
-    );
-  };
-
   // Fetch user data
   useEffect(() => {
     fetchUserData();
@@ -219,49 +155,44 @@ export default function Profile() {
     fetchFriends();
   }, []);
 
-  // Add this debug useEffect
+  // Debug useEffect
   useEffect(() => {
-    if (user) {
-      console.log("🔍 Current user data:", {
-        full_name: user.full_name,
-        first_name: user.first_name,
-        last_name: user.last_name,
-        logged_in: user.logged_in,
-        last_seen: user.last_seen,
-        email: user.email,
+    if (viewedUser) {
+      console.log("🔍 Viewed user data:", {
+        full_name: viewedUser.full_name,
+        logged_in: viewedUser.logged_in,
       });
-    } else {
-      console.log("🔍 User is null");
     }
-  }, [user]);
+    if (loggedInUser) {
+      console.log("🔍 Logged in user data:", {
+        full_name: loggedInUser.full_name,
+        logged_in: loggedInUser.logged_in,
+      });
+    }
+  }, [viewedUser, loggedInUser]);
 
-  // Add this after the first useEffect
+  // Auth State Listener
   useEffect(() => {
-    // Set up auth state listener
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log("Auth state changed:", event, session);
 
       if (event === "SIGNED_IN" && session?.user) {
-        // User just logged in
         try {
           await updateUserLoginStatus(true);
         } catch (error) {
           console.error("Error setting online status:", error);
         }
       }
-      // REMOVE the SIGNED_OUT handler here since handleLogout handles it
-      // This prevents duplicate logout attempts
     });
 
-    // Clean up listener
     return () => {
       subscription.unsubscribe();
     };
   }, [navigate]);
 
-  // Keep user online while active on the page
+  // Keep user online while active
   useEffect(() => {
     if (!currentUserId || !isOwnProfile) return;
 
@@ -284,22 +215,18 @@ export default function Profile() {
       ); // 5 minutes
     };
 
-    // Add event listeners for user activity
     activityEvents.forEach((event) => {
       window.addEventListener(event, updateActivity);
     });
 
-    // Initial activity update
     updateActivity();
 
-    // Clean up
     return () => {
       activityEvents.forEach((event) => {
         window.removeEventListener(event, updateActivity);
       });
       clearTimeout(activityTimeout);
 
-      // Mark as offline when component unmounts (if it's user's own profile)
       if (isOwnProfile) {
         setUserOffline();
       }
@@ -308,8 +235,9 @@ export default function Profile() {
 
   useEffect(() => {
     document.title = "DeskStaff";
-  }, []); // The empty dependency array ensures this runs once when mounted
+  }, []);
 
+  // Real-time subscription for user updates
   useEffect(() => {
     const userIdToSubscribe = urlUserId || currentUserId;
     if (!userIdToSubscribe) return;
@@ -326,7 +254,14 @@ export default function Profile() {
         },
         (payload) => {
           console.log("User updated:", payload.new);
-          setUser(payload.new as UserProfile);
+          const updatedUser = payload.new as UserProfile;
+
+          if (urlUserId && urlUserId !== currentUserId) {
+            setViewedUser(updatedUser);
+          } else {
+            setViewedUser(updatedUser);
+            setLoggedInUser(updatedUser);
+          }
         }
       )
       .subscribe();
@@ -334,9 +269,8 @@ export default function Profile() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [urlUserId, currentUserId]); // Update dependency array
+  }, [urlUserId, currentUserId]);
 
-  // Function to update user's logged_in status in database
   const updateUserLoginStatus = async (isLoggedIn: boolean): Promise<void> => {
     try {
       const {
@@ -351,9 +285,8 @@ export default function Profile() {
 
       console.log(`Updating user ${authUser.id} logged_in to: ${isLoggedIn}`);
 
-      // Use a timeout to prevent hanging requests
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
 
       const { error } = await supabase
         .from("users")
@@ -367,7 +300,6 @@ export default function Profile() {
       clearTimeout(timeoutId);
 
       if (error) {
-        // Don't show error if it's an abort error during logout
         if (
           error.message.includes("aborted") ||
           error.message.includes("AbortError")
@@ -382,7 +314,6 @@ export default function Profile() {
         );
       }
     } catch (error: any) {
-      // Catch and handle abort errors gracefully
       if (error.name === "AbortError" || error.message?.includes("aborted")) {
         console.log("Request was aborted (expected during navigation)");
         return;
@@ -391,23 +322,17 @@ export default function Profile() {
     }
   };
 
-  // Function to set user as online
   const setUserOnline = () => updateUserLoginStatus(true);
-
-  // Function to set user as offline
   const setUserOffline = () => updateUserLoginStatus(false);
 
   const fetchUserData = async () => {
     try {
       console.log("🔄 Starting fetchUserData...");
 
-      // First check session
       const {
         data: { session },
         error: sessionError,
       } = await supabase.auth.getSession();
-
-      console.log("📋 Session:", session ? "✅ Exists" : "❌ None");
 
       if (sessionError || !session) {
         console.error("❌ Session error:", sessionError);
@@ -416,126 +341,92 @@ export default function Profile() {
         return;
       }
 
-      // Set current user ID from session
       setCurrentUserId(session.user.id);
-      console.log("👤 Current User ID:", session.user.id);
-
-      // Determine which user ID to fetch
       const userIdToFetch = urlUserId || session.user.id;
-      console.log("🎯 Fetching data for User ID:", userIdToFetch);
-
-      // Check if this is the user's own profile
       const isOwnProfile = userIdToFetch === session.user.id;
       setIsOwnProfile(isOwnProfile);
-      console.log("👥 Is own profile?", isOwnProfile);
 
-      // Fetch user data from database
-      console.log("📥 Querying database for user...");
-      const {
-        data: userData,
-        error,
-        status,
-      } = await supabase
+      // 1. Fetch logged-in user's data
+      const { data: loggedInUserData, error: loggedInUserError } =
+        await supabase
+          .from("users")
+          .select("*")
+          .eq("id", session.user.id)
+          .single();
+
+      if (loggedInUserError) {
+        console.error("❌ Error fetching logged-in user:", loggedInUserError);
+      } else {
+        setLoggedInUser(loggedInUserData);
+      }
+
+      // 2. Fetch viewed user's data
+      const { data: viewedUserData, error: viewedUserError } = await supabase
         .from("users")
         .select("*")
         .eq("id", userIdToFetch)
         .single();
 
-      console.log("📊 Database response:", {
-        data: userData,
-        error: error,
-        status: status,
-        hasData: !!userData,
-      });
-
-      if (error) {
-        console.error("❌ Database error details:", {
-          code: error.code,
-          message: error.message,
-          details: error.details,
-        });
-
-        // Handle "no rows returned" error (user doesn't exist in database)
+      if (viewedUserError) {
         if (
-          error.code === "PGRST116" ||
-          error.message.includes("No rows found")
+          viewedUserError.code === "PGRST116" ||
+          viewedUserError.message.includes("No rows found")
         ) {
-          console.log("⚠️ User not found in database, creating record...");
+          console.log("⚠️ Viewed user not found in database...");
 
-          // Only create record if it's the user's own profile
           if (isOwnProfile) {
             await createUserRecord(session.user);
-            // Retry fetching after creation
-            await fetchUserData(); // This will recursively call itself
+            await fetchUserData();
             return;
           } else {
-            // If viewing someone else's profile that doesn't exist
             toast.error("User profile not found");
-            // Redirect to own profile
             navigate(`/profile/${session.user.id}`, { replace: true });
             return;
           }
         }
-
         toast.error("Failed to load profile data");
         return;
       }
 
-      if (!userData) {
-        console.error("❌ userData is null or undefined");
-
-        // Create user record if it doesn't exist (for own profile)
+      if (!viewedUserData) {
         if (isOwnProfile) {
           await createUserRecord(session.user);
-          await fetchUserData(); // Retry
+          await fetchUserData();
           return;
         }
-
         toast.error("User profile not found");
         return;
       }
 
-      console.log("✅ User data loaded successfully:", {
-        id: userData.id,
-        full_name: userData.full_name,
-        email: userData.email,
-      });
+      setViewedUser(viewedUserData);
 
-      // Set user state
-      setUser(userData);
-
-      // Only set edit form if it's the user's own profile
       if (isOwnProfile) {
         setEditForm({
-          first_name: userData.first_name || "",
-          last_name: userData.last_name || "",
-          bio: userData.bio || "",
-          location: userData.location || "",
-          workplace: userData.workplace || "",
-          education: userData.education || "",
-          birthday: userData.birthday || "",
-          website: userData.website || "",
-          privacy: userData.privacy || "public",
-          department: userData.department || "",
-          position: userData.position || "",
-          phone: userData.phone || "",
-          hire_date: userData.hire_date || "",
+          first_name: viewedUserData.first_name || "",
+          last_name: viewedUserData.last_name || "",
+          bio: viewedUserData.bio || "",
+          location: viewedUserData.location || "",
+          workplace: viewedUserData.workplace || "",
+          education: viewedUserData.education || "",
+          birthday: viewedUserData.birthday || "",
+          website: viewedUserData.website || "",
+          privacy: viewedUserData.privacy || "public",
+          department: viewedUserData.department || "",
+          position: viewedUserData.position || "",
+          phone: viewedUserData.phone || "",
+          hire_date: viewedUserData.hire_date || "",
         });
 
-        // Now set user as online (after user is loaded)
         try {
           await setUserOnline();
-          console.log("✅ User marked as online");
         } catch (onlineError) {
           console.error("⚠️ Failed to set user online:", onlineError);
-          // Don't throw, continue anyway
         }
       }
     } catch (error) {
       console.error("💥 Error in fetchUserData:", error);
       toast.error("An unexpected error occurred");
     } finally {
-      console.log("🏁 Setting loading to false");
       setLoading(false);
     }
   };
@@ -548,7 +439,9 @@ export default function Profile() {
         first_name: authUser.user_metadata?.first_name || "",
         last_name: authUser.user_metadata?.last_name || "",
         full_name:
-          `${authUser.user_metadata?.first_name || ""} ${authUser.user_metadata?.last_name || ""}`.trim() ||
+          `${authUser.user_metadata?.first_name || ""} ${
+            authUser.user_metadata?.last_name || ""
+          }`.trim() ||
           authUser.email?.split("@")[0] ||
           "User",
         avatar_url: null,
@@ -574,16 +467,14 @@ export default function Profile() {
 
   const fetchPosts = async () => {
     try {
-      // Determine which posts to fetch based on profile
       const userIdToFetchPosts = urlUserId || currentUserId;
-
       // Mock posts data - replace with actual API call
-      const mockPosts: Post[] = [
+      const mockPosts = [
         {
           id: "1",
           content: isOwnProfile
             ? "Just finished the Q3 project report ahead of schedule! Great teamwork from everyone involved. 🎯"
-            : `${user?.full_name || "This user"} shared a professional update`,
+            : `${viewedUser?.full_name || "This user"} shared a professional update`,
           image_url: isOwnProfile
             ? "https://images.unsplash.com/photo-1552664730-d307ca884978?w=800&auto=format&fit=crop"
             : null,
@@ -592,13 +483,12 @@ export default function Profile() {
           comments_count: 8,
           user: {
             id: userIdToFetchPosts || "1",
-            full_name: user?.full_name || "User",
-            avatar_url: user?.avatar_url || null,
+            full_name: viewedUser?.full_name || "User",
+            avatar_url: viewedUser?.avatar_url || null,
           },
           liked: false,
           bookmarked: false,
         },
-        // Add more mock posts as needed
       ];
       setPosts(mockPosts);
     } catch (error) {
@@ -608,7 +498,6 @@ export default function Profile() {
 
   const fetchFriends = async () => {
     try {
-      // Mock friends data - now with logged_in status
       const mockFriends: Friend[] = [
         {
           id: "2",
@@ -618,7 +507,7 @@ export default function Profile() {
           status: "accepted",
           department: "Engineering",
           position: "Senior Developer",
-          logged_in: true, // Online
+          logged_in: true,
         },
         {
           id: "3",
@@ -628,9 +517,8 @@ export default function Profile() {
           status: "accepted",
           department: "Marketing",
           position: "Marketing Manager",
-          logged_in: false, // Offline
+          logged_in: false,
         },
-        // Add more mock friends as needed
       ];
       setFriends(mockFriends);
     } catch (error) {
@@ -638,7 +526,6 @@ export default function Profile() {
     }
   };
 
-  // Add this debug function to test
   const testLoginStatusUpdate = async () => {
     try {
       const {
@@ -651,7 +538,6 @@ export default function Profile() {
 
       toast.loading("Testing login status update...");
 
-      // Test update
       const { data, error } = await supabase
         .from("users")
         .update({
@@ -676,11 +562,8 @@ export default function Profile() {
 
   const handleLogout = async () => {
     setIsLogoutDialogOpen(false);
-
-    // Set a flag to prevent navigation until DB update is done
     let dbUpdateComplete = false;
 
-    // Override beforeunload to wait for DB update
     const beforeUnloadHandler = (e: BeforeUnloadEvent) => {
       if (!dbUpdateComplete) {
         e.preventDefault();
@@ -693,35 +576,27 @@ export default function Profile() {
 
     try {
       toast.loading("Logging out...");
-
-      // Get user
       const {
         data: { user },
       } = await supabase.auth.getUser();
 
       if (user) {
-        // Update database with retry logic
         await updateDatabaseWithRetry(user.id);
       }
 
-      // Mark DB update as complete
       dbUpdateComplete = true;
-
-      // Remove the beforeunload listener
       window.removeEventListener("beforeunload", beforeUnloadHandler);
 
-      // Sign out
       await supabase.auth.signOut();
 
-      // Clear state
-      setUser(null);
+      setLoggedInUser(null);
+      setViewedUser(null);
       setPosts([]);
       setFriends([]);
 
       toast.dismiss();
       toast.success("Logged out!");
 
-      // Navigate
       navigate("/", { replace: true });
     } catch (error) {
       console.error("Logout error:", error);
@@ -755,7 +630,6 @@ export default function Profile() {
           `✅ Database updated on attempt ${attempt}, status: ${status}`
         );
 
-        // Verify the update
         const { data } = await supabase
           .from("users")
           .select("logged_in")
@@ -770,14 +644,11 @@ export default function Profile() {
         }
       } catch (error) {
         console.error(`Attempt ${attempt} failed:`, error);
-
         if (attempt === retries) {
           throw new Error(
             `Failed to update database after ${retries} attempts`
           );
         }
-
-        // Wait before retry
         await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
       }
     }
@@ -814,7 +685,6 @@ export default function Profile() {
       if (error) throw error;
 
       toast.success("Your profile has been successfully updated");
-
       fetchUserData();
       setIsEditing(false);
     } catch (error) {
@@ -858,39 +728,30 @@ export default function Profile() {
     }
   };
 
-  const handleCreatePost = async () => {
-    if (!newPost.trim() && !selectedImage) return;
-
-    setIsPosting(true);
+  const handleCreatePost = async (content: string, image?: File) => {
     try {
-      // Mock post creation - replace with actual API call
-      const newPostObj: Post = {
+      const newPostObj = {
         id: Date.now().toString(),
-        content: newPost,
-        image_url: imagePreview,
+        content,
+        image_url: image ? URL.createObjectURL(image) : null,
         created_at: new Date().toISOString(),
         likes_count: 0,
         comments_count: 0,
         user: {
-          id: user?.id || "",
-          full_name: user?.full_name || "",
-          avatar_url: user?.avatar_url || null,
+          id: viewedUser?.id || "",
+          full_name: viewedUser?.full_name || "",
+          avatar_url: viewedUser?.avatar_url || null,
         },
         liked: false,
         bookmarked: false,
       };
 
       setPosts([newPostObj, ...posts]);
-      setNewPost("");
-      setSelectedImage(null);
-      setImagePreview(null);
-
       toast.success("Your post has been published");
     } catch (error) {
       console.error("Error creating post:", error);
       toast.error("Failed to create post");
-    } finally {
-      setIsPosting(false);
+      throw error;
     }
   };
 
@@ -909,7 +770,6 @@ export default function Profile() {
       })
     );
 
-    // Show toast for like/unlike action
     const post = posts.find((p) => p.id === postId);
     if (post) {
       if (!post.liked) {
@@ -934,7 +794,6 @@ export default function Profile() {
       })
     );
 
-    // Show toast for bookmark action
     const post = posts.find((p) => p.id === postId);
     if (post) {
       if (!post.bookmarked) {
@@ -945,57 +804,9 @@ export default function Profile() {
     }
   };
 
-  const handleFriendRequest = (
-    friendId: string,
-    action: "accept" | "reject" | "cancel"
-  ) => {
-    setFriends(
-      friends
-        .map((friend) => {
-          if (friend.id === friendId) {
-            if (action === "accept") {
-              toast.success(`Friend request accepted from ${friend.full_name}`);
-              return { ...friend, status: "accepted" };
-            } else if (action === "reject") {
-              toast.info(`Friend request from ${friend.full_name} rejected`);
-              return { ...friend, status: "rejected" };
-            } else if (action === "cancel") {
-              toast.info(`Friend request to ${friend.full_name} cancelled`);
-              return { ...friend, status: "cancelled" };
-            }
-          }
-          return friend;
-        })
-        .filter(
-          (friend) =>
-            friend.status !== "rejected" && friend.status !== "cancelled"
-        )
-    );
-  };
-
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        // 5MB limit
-        toast.error("Image size should be less than 5MB");
-        return;
-      }
-
-      setSelectedImage(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-      toast.info("Image selected. Click 'Post' to publish.");
-    }
-  };
-
-  const removeImage = () => {
-    setSelectedImage(null);
-    setImagePreview(null);
-    toast.info("Image removed");
+  const handleDeletePost = (postId: string) => {
+    setPosts(posts.filter((p) => p.id !== postId));
+    toast.success("Post deleted successfully");
   };
 
   if (loading) {
@@ -1026,145 +837,17 @@ export default function Profile() {
   return (
     <ProtectedRoute>
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
-        {/* Header */}
-        <header className="sticky top-0 z-50 bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg border-b border-gray-200/50 dark:border-gray-700/50">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between h-16">
-              <div className="flex items-center space-x-4">
-                <Link to="/" className="flex items-center space-x-3">
-                  <div className="w-9 h-9 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
-                    <Building className="h-5 w-5 text-white" />
-                  </div>
-                  <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent dark:from-blue-400 dark:to-indigo-400">
-                    DeskStaff
-                  </span>
-                </Link>
-                <div className="relative hidden md:block">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                  <Input
-                    placeholder="Search colleagues, projects, or documents..."
-                    className="pl-10 w-64 bg-gray-100/50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600 focus:border-blue-500 focus:ring-blue-500 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
-                  />
-                </div>
-              </div>
+        <Header
+          user={loggedInUser}
+          currentUserId={currentUserId}
+          onNavigate={navigate}
+          onEditProfile={() => setIsEditing(true)}
+          onPrivacySettings={() => setIsPrivacyOpen(true)}
+          onChangePassword={() => setIsChangePasswordOpen(true)}
+          onLogout={() => setIsLogoutDialogOpen(true)}
+        />
 
-              <div className="flex items-center space-x-3">
-                {/* Theme Toggle Button */}
-                <ThemeToggle />
-
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
-                  title="Home"
-                >
-                  <Home className="h-5 w-5" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 relative text-gray-700 dark:text-gray-300"
-                  title="Notifications"
-                >
-                  <Bell className="h-5 w-5" />
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                    5
-                  </span>
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 relative text-gray-700 dark:text-gray-300"
-                  title="Messages"
-                >
-                  <MessageCircle className="h-5 w-5" />
-                  <span className="absolute -top-1 -right-1 bg-blue-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                    3
-                  </span>
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
-                  title="Teams"
-                >
-                  <UsersIcon className="h-5 w-5" />
-                </Button>
-
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      className="relative h-9 w-9 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
-                    >
-                      <Avatar className="h-9 w-9 ring-2 ring-white dark:ring-gray-700">
-                        <AvatarImage src={user?.avatar_url || undefined} />
-                        <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white">
-                          {user?.first_name?.[0]}
-                          {user?.last_name?.[0]}
-                        </AvatarFallback>
-                      </Avatar>
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent
-                    className="w-56 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700"
-                    align="end"
-                  >
-                    <DropdownMenuLabel className="flex items-center gap-2 text-gray-900 dark:text-white">
-                      <div className="flex-1">
-                        <p className="font-semibold">{user?.full_name}</p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                          {user?.position || "Employee"}
-                        </p>
-                      </div>
-                    </DropdownMenuLabel>
-                    <DropdownMenuSeparator className="bg-gray-200 dark:bg-gray-700" />
-                    <DropdownMenuItem
-                      onClick={() => navigate(`/profile/${currentUserId}`)}
-                      className="text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                    >
-                      <User className="mr-2 h-4 w-4" />
-                      My Profile
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => setIsEditing(true)}
-                      className="text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                    >
-                      <Edit className="mr-2 h-4 w-4" />
-                      Edit Profile
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => setIsPrivacyOpen(true)}
-                      className="text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                    >
-                      <Shield className="mr-2 h-4 w-4" />
-                      Privacy Settings
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => setIsChangePasswordOpen(true)}
-                      className="text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                    >
-                      <Key className="mr-2 h-4 w-4" />
-                      Change Password
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator className="bg-gray-200 dark:bg-gray-700" />
-                    <DropdownMenuItem
-                      className="text-red-600 focus:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
-                      onClick={() => setIsLogoutDialogOpen(true)}
-                    >
-                      <LogOut className="mr-2 h-4 w-4" />
-                      Log out
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </div>
-          </div>
-        </header>
-
-        {/* Main Content */}
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          {/* Profile Header */}
           <Card className="mb-6 overflow-hidden border-gray-200/50 dark:border-gray-700/50 shadow-lg bg-white dark:bg-gray-900">
             <div className="relative h-56 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-600">
               <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
@@ -1191,29 +874,41 @@ export default function Profile() {
 
             <div className="relative px-6 pb-6">
               <div className="flex flex-col sm:flex-row items-start sm:items-end gap-6 -mt-16">
-                <Avatar className="h-32 w-32 border-4 border-white dark:border-gray-800 shadow-xl">
-                  <AvatarImage src={user?.avatar_url || undefined} />
-                  <AvatarFallback className="text-3xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white">
-                    {user?.first_name?.[0]}
-                    {user?.last_name?.[0]}
-                  </AvatarFallback>
-                </Avatar>
+                <ProfilePictureUpload
+                  userId={viewedUser?.id || ""}
+                  currentAvatarUrl={viewedUser?.avatar_url || null}
+                  onUploadComplete={(avatarUrl) => {
+                    if (viewedUser) {
+                      setViewedUser({
+                        ...viewedUser,
+                        avatar_url: avatarUrl || null,
+                      });
+                    }
+                    if (loggedInUser && isOwnProfile) {
+                      setLoggedInUser({
+                        ...loggedInUser,
+                        avatar_url: avatarUrl || null,
+                      });
+                    }
+                  }}
+                  size="lg"
+                  editable={isOwnProfile}
+                />
 
                 <div className="flex-1 space-y-4">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="space-y-2">
                       <div className="flex items-center gap-3">
                         <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-                          {user?.full_name}
+                          {viewedUser?.full_name}
                         </h1>
 
-                        {/* Status Badge */}
-                        {user?.logged_in ? (
+                        {viewedUser?.logged_in ? (
                           <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 border-green-200 dark:border-green-800">
                             <div className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse mr-1.5"></div>
                             Online
                           </Badge>
-                        ) : user?.last_seen ? (
+                        ) : viewedUser?.last_seen ? (
                           <Badge
                             variant="outline"
                             className="border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300"
@@ -1223,22 +918,20 @@ export default function Profile() {
                           </Badge>
                         ) : null}
 
-                        {/* Position Badge */}
-                        {user?.position && (
+                        {viewedUser?.position && (
                           <Badge
                             variant="secondary"
                             className="bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300"
                           >
-                            {user.position}
+                            {viewedUser.position}
                           </Badge>
                         )}
                       </div>
 
-                      {/* User info row */}
                       <div className="flex flex-wrap items-center gap-4 text-gray-600 dark:text-gray-300">
                         <div className="flex items-center gap-2">
                           <Briefcase className="h-4 w-4" />
-                          <span>{user?.department || "Department"}</span>
+                          <span>{viewedUser?.department || "Department"}</span>
                         </div>
 
                         <div className="flex items-center gap-2">
@@ -1250,25 +943,25 @@ export default function Profile() {
                           <CalendarDays className="h-4 w-4" />
                           <span>
                             Joined{" "}
-                            {user?.created_at
-                              ? new Date(user.created_at).toLocaleDateString(
-                                  "en-US",
-                                  {
-                                    month: "short",
-                                    year: "numeric",
-                                  }
-                                )
+                            {viewedUser?.created_at
+                              ? new Date(
+                                  viewedUser.created_at
+                                ).toLocaleDateString("en-US", {
+                                  month: "short",
+                                  year: "numeric",
+                                })
                               : "Recently"}
                           </span>
                         </div>
 
-                        {/* Last seen time for offline users */}
-                        {!user?.logged_in && user?.last_seen && (
+                        {!viewedUser?.logged_in && viewedUser?.last_seen && (
                           <div className="flex items-center gap-2">
                             <Clock className="h-4 w-4" />
                             <span className="text-sm">
                               Last seen{" "}
-                              {new Date(user.last_seen).toLocaleTimeString([], {
+                              {new Date(
+                                viewedUser.last_seen
+                              ).toLocaleTimeString([], {
                                 hour: "2-digit",
                                 minute: "2-digit",
                               })}
@@ -1347,139 +1040,30 @@ export default function Profile() {
           </Card>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Left Column - Info & Connections */}
             <div className="space-y-6">
-              {/* Bio Card */}
-              <Card className="border-gray-200/50 dark:border-gray-700/50 bg-white dark:bg-gray-900">
-                <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center justify-between text-lg text-gray-900 dark:text-white">
-                    <span className="flex items-center gap-2">
-                      <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                      Professional Summary
-                    </span>
-                    {!isEditing && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setIsEditing(true)}
-                        className="text-gray-600 dark:text-gray-400"
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {user?.bio ? (
-                    <p className="text-gray-600 dark:text-gray-300 leading-relaxed">
-                      {user.bio}
-                    </p>
-                  ) : (
-                    <p className="text-gray-400 italic">No summary added yet</p>
-                  )}
+              <UserInfoCard
+                user={{
+                  full_name: viewedUser?.full_name || "",
+                  avatar_url: viewedUser?.avatar_url || null,
+                  bio: viewedUser?.bio || null,
+                  position: viewedUser?.position || "",
+                  department: viewedUser?.department || "",
+                  location: viewedUser?.location || null,
+                  email: viewedUser?.email || "",
+                  phone: viewedUser?.phone || "",
+                  hire_date: viewedUser?.hire_date || "",
+                  logged_in: viewedUser?.logged_in,
+                  last_seen: viewedUser?.last_seen,
+                  created_at: viewedUser?.created_at,
+                }}
+                connectionsCount={friends.length}
+                isOwnProfile={isOwnProfile}
+                onConnect={() => toast.success("Connection request sent!")}
+                onMessage={() => toast.info("Messaging feature coming soon!")}
+                onEdit={() => setIsEditing(true)}
+                showActions={!isOwnProfile}
+              />
 
-                  <Separator className="bg-gray-200 dark:bg-gray-700" />
-
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-                        <BriefcaseBusiness className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-900 dark:text-white">
-                          Position
-                        </p>
-                        <p className="text-gray-600 dark:text-gray-300">
-                          {user?.position || "Not specified"}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
-                        <Building className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-900 dark:text-white">
-                          Department
-                        </p>
-                        <p className="text-gray-600 dark:text-gray-300">
-                          {user?.department || "Not specified"}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
-                        <MapPin className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-900 dark:text-white">
-                          Location
-                        </p>
-                        <p className="text-gray-600 dark:text-gray-300">
-                          {user?.location || "Not specified"}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-                        <Mail className="h-5 w-5 text-green-600 dark:text-green-400" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-900 dark:text-white">
-                          Email
-                        </p>
-                        <p className="text-gray-600 dark:text-gray-300 truncate">
-                          {user?.email || "Not specified"}
-                        </p>
-                      </div>
-                    </div>
-
-                    {user?.phone && (
-                      <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
-                          <Phone className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-                        </div>
-                        <div className="flex-1">
-                          <p className="font-medium text-gray-900 dark:text-white">
-                            Phone
-                          </p>
-                          <p className="text-gray-600 dark:text-gray-300">
-                            {user.phone}
-                          </p>
-                        </div>
-                      </div>
-                    )}
-
-                    {user?.hire_date && (
-                      <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-lg bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
-                          <Calendar className="h-5 w-5 text-red-600 dark:text-red-400" />
-                        </div>
-                        <div className="flex-1">
-                          <p className="font-medium text-gray-900 dark:text-white">
-                            Hire Date
-                          </p>
-                          <p className="text-gray-600 dark:text-gray-300">
-                            {new Date(user.hire_date).toLocaleDateString(
-                              "en-US",
-                              {
-                                month: "long",
-                                day: "numeric",
-                                year: "numeric",
-                              }
-                            )}
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Connections Card */}
               <Card className="border-gray-200/50 dark:border-gray-700/50 bg-white dark:bg-gray-900">
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
@@ -1518,7 +1102,6 @@ export default function Profile() {
                                 .split(" ")
                                 .map((n) => n[0])
                                 .join("")}
-                              {/* Online status indicator */}
                               {friend.logged_in && (
                                 <div className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-green-500 border-2 border-white dark:border-gray-800"></div>
                               )}
@@ -1539,7 +1122,6 @@ export default function Profile() {
                 </CardContent>
               </Card>
 
-              {/* Skills & Privacy Card */}
               <Card className="border-gray-200/50 dark:border-gray-700/50 bg-white dark:bg-gray-900">
                 <CardHeader className="pb-3">
                   <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white">
@@ -1554,25 +1136,26 @@ export default function Profile() {
                         Profile Privacy
                       </p>
                       <p className="text-sm text-gray-500 dark:text-gray-400">
-                        {user?.privacy === "public" &&
+                        {viewedUser?.privacy === "public" &&
                           "Public - Anyone can see your profile"}
-                        {user?.privacy === "friends" && "Connections only"}
-                        {user?.privacy === "private" &&
+                        {viewedUser?.privacy === "friends" &&
+                          "Connections only"}
+                        {viewedUser?.privacy === "private" &&
                           "Private - Only you can see"}
                       </p>
                     </div>
                     <Badge
                       variant={
-                        user?.privacy === "public"
+                        viewedUser?.privacy === "public"
                           ? "default"
-                          : user?.privacy === "friends"
+                          : viewedUser?.privacy === "friends"
                             ? "secondary"
                             : "destructive"
                       }
                       className="bg-gradient-to-r from-blue-500 to-indigo-600"
                     >
-                      {user?.privacy?.charAt(0).toUpperCase() +
-                        user?.privacy?.slice(1)}
+                      {viewedUser?.privacy?.charAt(0).toUpperCase() +
+                        viewedUser?.privacy?.slice(1)}
                     </Badge>
                   </div>
                   <Button
@@ -1587,113 +1170,16 @@ export default function Profile() {
               </Card>
             </div>
 
-            {/* Middle Column - Posts & Activity */}
             <div className="lg:col-span-2 space-y-6">
-              {/* Create Post */}
-              <Card className="border-gray-200/50 dark:border-gray-700/50 bg-white dark:bg-gray-900">
-                <CardContent className="pt-6">
-                  <div className="flex gap-4">
-                    <Avatar className="h-12 w-12">
-                      <AvatarImage src={user?.avatar_url || undefined} />
-                      <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white">
-                        {user?.first_name?.[0]}
-                        {user?.last_name?.[0]}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 space-y-4">
-                      <Textarea
-                        placeholder={`What's on your mind, ${user?.first_name}? Share an update, article, or thought...`}
-                        value={newPost}
-                        onChange={(e) => setNewPost(e.target.value)}
-                        className="min-h-[120px] resize-none border-gray-300 dark:border-gray-600 focus:border-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
-                      />
+              {isOwnProfile && (
+                <CreatePost
+                  user={viewedUser}
+                  onSubmit={handleCreatePost}
+                  placeholder="What's on your mind"
+                  disabled={!viewedUser}
+                />
+              )}
 
-                      {imagePreview && (
-                        <div className="relative rounded-xl overflow-hidden">
-                          <img
-                            src={imagePreview}
-                            alt="Preview"
-                            className="w-full max-h-96 object-cover"
-                          />
-                          <Button
-                            type="button"
-                            variant="destructive"
-                            size="sm"
-                            className="absolute top-3 right-3 backdrop-blur-sm"
-                            onClick={removeImage}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      )}
-
-                      <Separator className="bg-gray-200 dark:bg-gray-700" />
-
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          <label className="flex items-center gap-2 cursor-pointer text-gray-600 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 transition-colors">
-                            <input
-                              type="file"
-                              accept="image/*"
-                              className="hidden"
-                              onChange={handleImageSelect}
-                            />
-                            <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-900/30">
-                              <ImageIcon className="h-5 w-5" />
-                            </div>
-                            <span className="hidden sm:inline">Photo</span>
-                          </label>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="gap-2 text-gray-600 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400"
-                            onClick={() =>
-                              toast.info("Video upload coming soon!")
-                            }
-                          >
-                            <div className="p-2 rounded-lg bg-purple-50 dark:bg-purple-900/30">
-                              <Video className="h-5 w-5" />
-                            </div>
-                            <span className="hidden sm:inline">Video</span>
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="gap-2 text-gray-600 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400"
-                            onClick={() =>
-                              toast.info("Feeling selection coming soon!")
-                            }
-                          >
-                            <div className="p-2 rounded-lg bg-green-50 dark:bg-green-900/30">
-                              <Smile className="h-5 w-5" />
-                            </div>
-                            <span className="hidden sm:inline">Feeling</span>
-                          </Button>
-                        </div>
-
-                        <Button
-                          onClick={handleCreatePost}
-                          disabled={
-                            isPosting || (!newPost.trim() && !selectedImage)
-                          }
-                          className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg"
-                        >
-                          {isPosting ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <>
-                              <Send className="h-4 w-4 mr-2" />
-                              Post
-                            </>
-                          )}
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Activity Tabs */}
               <Tabs value={activeTab} onValueChange={setActiveTab}>
                 <TabsList className="grid w-full grid-cols-3 bg-gray-100/50 dark:bg-gray-800/50 p-1 rounded-xl">
                   <TabsTrigger
@@ -1721,174 +1207,18 @@ export default function Profile() {
 
                 <TabsContent value="posts" className="space-y-6 mt-6">
                   {posts.map((post) => (
-                    <Card
+                    <Post
                       key={post.id}
-                      className="border-gray-200/50 dark:border-gray-700/50 overflow-hidden bg-white dark:bg-gray-900"
-                    >
-                      <CardContent className="pt-6">
-                        <div className="flex items-start justify-between mb-4">
-                          <div className="flex items-center gap-3">
-                            <Avatar>
-                              <AvatarImage
-                                src={post.user.avatar_url || undefined}
-                              />
-                              <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white">
-                                {post.user.full_name
-                                  .split(" ")
-                                  .map((n) => n[0])
-                                  .join("")}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div>
-                              <p className="font-semibold text-gray-900 dark:text-white">
-                                {post.user.full_name}
-                              </p>
-                              <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-                                <Clock className="h-3 w-3" />
-                                <span>
-                                  {new Date(post.created_at).toLocaleDateString(
-                                    "en-US",
-                                    {
-                                      month: "short",
-                                      day: "numeric",
-                                      hour: "2-digit",
-                                      minute: "2-digit",
-                                    }
-                                  )}
-                                </span>
-                                <GlobeIcon className="h-3 w-3" />
-                                <span>Public</span>
-                              </div>
-                            </div>
-                          </div>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
-                              >
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700">
-                              <DropdownMenuItem
-                                onClick={() =>
-                                  toast.info("Edit post feature coming soon!")
-                                }
-                                className="text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                              >
-                                <Edit className="mr-2 h-4 w-4" />
-                                Edit Post
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() => handleBookmarkPost(post.id)}
-                                className="text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                              >
-                                <Bookmark
-                                  className={`mr-2 h-4 w-4 ${post.bookmarked ? "fill-current text-yellow-500" : ""}`}
-                                />
-                                {post.bookmarked
-                                  ? "Remove from Bookmarks"
-                                  : "Save Post"}
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator className="bg-gray-200 dark:bg-gray-700" />
-                              <DropdownMenuItem
-                                className="text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
-                                onClick={() => {
-                                  setPosts(
-                                    posts.filter((p) => p.id !== post.id)
-                                  );
-                                  toast.success("Post deleted successfully");
-                                }}
-                              >
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                Delete Post
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-
-                        <p className="mb-4 text-gray-700 dark:text-gray-300 leading-relaxed">
-                          {post.content}
-                        </p>
-
-                        {post.image_url && (
-                          <div className="mb-4 rounded-xl overflow-hidden">
-                            <img
-                              src={post.image_url}
-                              alt="Post"
-                              className="w-full max-h-96 object-cover cursor-pointer hover:opacity-95 transition-opacity"
-                              onClick={() => toast.info("Viewing full image")}
-                            />
-                          </div>
-                        )}
-
-                        <div className="flex items-center justify-between text-gray-500 dark:text-gray-400 mb-4">
-                          <div className="flex items-center gap-3">
-                            <div className="flex items-center -space-x-1">
-                              <div className="h-6 w-6 rounded-full bg-blue-500 flex items-center justify-center ring-2 ring-white dark:ring-gray-800">
-                                <span className="text-xs text-white">👍</span>
-                              </div>
-                              <div className="h-6 w-6 rounded-full bg-red-500 flex items-center justify-center ring-2 ring-white dark:ring-gray-800">
-                                <span className="text-xs text-white">❤️</span>
-                              </div>
-                            </div>
-                            <span>{post.likes_count} reactions</span>
-                          </div>
-                          <div>
-                            <span>{post.comments_count} comments</span>
-                          </div>
-                        </div>
-
-                        <Separator className="mb-4 bg-gray-200 dark:bg-gray-700" />
-
-                        <div className="grid grid-cols-4 gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className={`gap-2 ${post.liked ? "text-blue-600" : "text-gray-600 dark:text-gray-400"}`}
-                            onClick={() => handleLikePost(post.id)}
-                          >
-                            <Heart
-                              className={`h-4 w-4 ${post.liked ? "fill-current" : ""}`}
-                            />
-                            {post.liked ? "Liked" : "Like"}
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="gap-2 text-gray-600 dark:text-gray-400"
-                            onClick={() =>
-                              toast.info("Comment feature coming soon!")
-                            }
-                          >
-                            <MessageSquare className="h-4 w-4" />
-                            Comment
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="gap-2 text-gray-600 dark:text-gray-400"
-                            onClick={() => toast.success("Post shared!")}
-                          >
-                            <Share2 className="h-4 w-4" />
-                            Share
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className={`gap-2 ${post.bookmarked ? "text-yellow-600" : "text-gray-600 dark:text-gray-400"}`}
-                            onClick={() => handleBookmarkPost(post.id)}
-                          >
-                            <Bookmark
-                              className={`h-4 w-4 ${post.bookmarked ? "fill-current" : ""}`}
-                            />
-                            Save
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
+                      {...post}
+                      isOwnPost={post.user.id === viewedUser?.id}
+                      onLike={handleLikePost}
+                      onBookmark={handleBookmarkPost}
+                      onComment={() =>
+                        toast.info("Comment feature coming soon!")
+                      }
+                      onShare={() => toast.success("Post shared!")}
+                      onDelete={handleDeletePost}
+                    />
                   ))}
                 </TabsContent>
 
@@ -1933,7 +1263,9 @@ export default function Profile() {
                                     onClick={() => handleLikePost(post.id)}
                                   >
                                     <Heart
-                                      className={`h-3 w-3 ${post.liked ? "fill-current" : ""}`}
+                                      className={`h-3 w-3 ${
+                                        post.liked ? "fill-current" : ""
+                                      }`}
                                     />
                                   </Button>
                                   <Button
@@ -1990,7 +1322,6 @@ export default function Profile() {
           </div>
         </main>
 
-        {/* Edit Profile Dialog */}
         <Dialog open={isEditing} onOpenChange={setIsEditing}>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
             <DialogHeader>
@@ -2288,7 +1619,6 @@ export default function Profile() {
           </DialogContent>
         </Dialog>
 
-        {/* Logout Dialog */}
         <Dialog open={isLogoutDialogOpen} onOpenChange={setIsLogoutDialogOpen}>
           <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
             <DialogHeader>
@@ -2316,7 +1646,6 @@ export default function Profile() {
           </DialogContent>
         </Dialog>
 
-        {/* Change Password Dialog */}
         <Dialog
           open={isChangePasswordOpen}
           onOpenChange={setIsChangePasswordOpen}
@@ -2464,7 +1793,6 @@ export default function Profile() {
           </DialogContent>
         </Dialog>
 
-        {/* Privacy Settings Dialog */}
         <Dialog open={isPrivacyOpen} onOpenChange={setIsPrivacyOpen}>
           <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
             <DialogHeader>
@@ -2581,8 +1909,7 @@ export default function Profile() {
           </DialogContent>
         </Dialog>
 
-        {/* Add test button for login status (optional) */}
-        <div className="fixed bottom-4 right-4">
+        <div className="fixed bottom-4 right-4 flex flex-col gap-2">
           <Button
             variant="outline"
             size="sm"
@@ -2590,6 +1917,22 @@ export default function Profile() {
             className="border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300"
           >
             Test Login Status Update
+          </Button>
+
+          <Button
+            onClick={() => {
+              console.log("Current states:", {
+                loggedInUser,
+                viewedUser,
+                currentUserId,
+                loading,
+              });
+              fetchUserData();
+            }}
+            className="border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300"
+            size="sm"
+          >
+            Debug Fetch
           </Button>
         </div>
       </div>
