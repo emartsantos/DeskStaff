@@ -191,6 +191,22 @@ export default function Profile() {
     fetchFriends();
   }, []);
 
+  // Add this debug useEffect
+  useEffect(() => {
+    if (user) {
+      console.log("🔍 Current user data:", {
+        full_name: user.full_name,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        logged_in: user.logged_in,
+        last_seen: user.last_seen,
+        email: user.email,
+      });
+    } else {
+      console.log("🔍 User is null");
+    }
+  }, [user]);
+
   // Add this after the first useEffect
   useEffect(() => {
     // Set up auth state listener
@@ -352,14 +368,18 @@ export default function Profile() {
 
   const fetchUserData = async () => {
     try {
+      console.log("🔄 Starting fetchUserData...");
+
       // First check session
       const {
         data: { session },
         error: sessionError,
       } = await supabase.auth.getSession();
 
+      console.log("📋 Session:", session ? "✅ Exists" : "❌ None");
+
       if (sessionError || !session) {
-        console.error("Session error:", sessionError);
+        console.error("❌ Session error:", sessionError);
         toast.error("Please log in to continue");
         navigate("/", { replace: true });
         return;
@@ -367,28 +387,127 @@ export default function Profile() {
 
       // Set current user ID from session
       setCurrentUserId(session.user.id);
-
-      // Update user as online immediately
-      await setUserOnline();
+      console.log("👤 Current User ID:", session.user.id);
 
       // Determine which user ID to fetch
       const userIdToFetch = urlUserId || session.user.id;
+      console.log("🎯 Fetching data for User ID:", userIdToFetch);
 
       // Check if this is the user's own profile
-      setIsOwnProfile(userIdToFetch === session.user.id);
+      const isOwnProfile = userIdToFetch === session.user.id;
+      setIsOwnProfile(isOwnProfile);
+      console.log("👥 Is own profile?", isOwnProfile);
+
+      // ⚠️ REMOVED: Don't call setUserOnline here - it might be failing
+      // await setUserOnline(); // Remove this line
 
       // Fetch user data from database
-      const { data: userData, error } = await supabase
+      console.log("📥 Querying database for user...");
+      const {
+        data: userData,
+        error,
+        status,
+      } = await supabase
         .from("users")
         .select("*")
         .eq("id", userIdToFetch)
         .single();
 
-      // ... rest of your fetchUserData function
+      console.log("📊 Database response:", {
+        data: userData,
+        error: error,
+        status: status,
+        hasData: !!userData,
+      });
+
+      if (error) {
+        console.error("❌ Database error details:", {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+        });
+
+        // Handle "no rows returned" error (user doesn't exist in database)
+        if (
+          error.code === "PGRST116" ||
+          error.message.includes("No rows found")
+        ) {
+          console.log("⚠️ User not found in database, creating record...");
+
+          // Only create record if it's the user's own profile
+          if (isOwnProfile) {
+            await createUserRecord(session.user);
+            // Retry fetching after creation
+            await fetchUserData(); // This will recursively call itself
+            return;
+          } else {
+            // If viewing someone else's profile that doesn't exist
+            toast.error("User profile not found");
+            // Redirect to own profile
+            navigate(`/profile/${session.user.id}`, { replace: true });
+            return;
+          }
+        }
+
+        toast.error("Failed to load profile data");
+        return;
+      }
+
+      if (!userData) {
+        console.error("❌ userData is null or undefined");
+
+        // Create user record if it doesn't exist (for own profile)
+        if (isOwnProfile) {
+          await createUserRecord(session.user);
+          await fetchUserData(); // Retry
+          return;
+        }
+
+        toast.error("User profile not found");
+        return;
+      }
+
+      console.log("✅ User data loaded successfully:", {
+        id: userData.id,
+        full_name: userData.full_name,
+        email: userData.email,
+      });
+
+      // Set user state
+      setUser(userData);
+
+      // Only set edit form if it's the user's own profile
+      if (isOwnProfile) {
+        setEditForm({
+          first_name: userData.first_name || "",
+          last_name: userData.last_name || "",
+          bio: userData.bio || "",
+          location: userData.location || "",
+          workplace: userData.workplace || "",
+          education: userData.education || "",
+          birthday: userData.birthday || "",
+          website: userData.website || "",
+          privacy: userData.privacy || "public",
+          department: userData.department || "",
+          position: userData.position || "",
+          phone: userData.phone || "",
+          hire_date: userData.hire_date || "",
+        });
+
+        // Now set user as online (after user is loaded)
+        try {
+          await setUserOnline();
+          console.log("✅ User marked as online");
+        } catch (onlineError) {
+          console.error("⚠️ Failed to set user online:", onlineError);
+          // Don't throw, continue anyway
+        }
+      }
     } catch (error) {
-      console.error("Error:", error);
+      console.error("💥 Error in fetchUserData:", error);
       toast.error("An unexpected error occurred");
     } finally {
+      console.log("🏁 Setting loading to false");
       setLoading(false);
     }
   };
@@ -1020,6 +1139,24 @@ export default function Profile() {
                         <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
                           {user?.full_name}
                         </h1>
+
+                        {/* Status Badge */}
+                        {user?.logged_in ? (
+                          <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 border-green-200 dark:border-green-800">
+                            <div className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse mr-1.5"></div>
+                            Online
+                          </Badge>
+                        ) : user?.last_seen ? (
+                          <Badge
+                            variant="outline"
+                            className="border-gray-300 dark:border-gray-600"
+                          >
+                            <div className="h-1.5 w-1.5 rounded-full bg-gray-400 mr-1.5"></div>
+                            Offline
+                          </Badge>
+                        ) : null}
+
+                        {/* Position Badge */}
                         {user?.position && (
                           <Badge
                             variant="secondary"
@@ -1029,15 +1166,19 @@ export default function Profile() {
                           </Badge>
                         )}
                       </div>
+
+                      {/* User info row */}
                       <div className="flex flex-wrap items-center gap-4 text-gray-600 dark:text-gray-300">
                         <div className="flex items-center gap-2">
                           <Briefcase className="h-4 w-4" />
                           <span>{user?.department || "Department"}</span>
                         </div>
+
                         <div className="flex items-center gap-2">
                           <Users className="h-4 w-4" />
                           <span>{friends.length} Connections</span>
                         </div>
+
                         <div className="flex items-center gap-2">
                           <CalendarDays className="h-4 w-4" />
                           <span>
@@ -1053,6 +1194,20 @@ export default function Profile() {
                               : "Recently"}
                           </span>
                         </div>
+
+                        {/* Last seen time for offline users */}
+                        {!user?.logged_in && user?.last_seen && (
+                          <div className="flex items-center gap-2">
+                            <Clock className="h-4 w-4" />
+                            <span className="text-sm">
+                              Last seen{" "}
+                              {new Date(user.last_seen).toLocaleTimeString([], {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
 
