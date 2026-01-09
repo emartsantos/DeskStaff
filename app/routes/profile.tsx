@@ -1098,12 +1098,10 @@ export default function Profile() {
                       className="relative h-9 w-9 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
                     >
                       <Avatar className="h-9 w-9 ring-2 ring-white dark:ring-gray-700">
-                        <AvatarImage
-                          src={currentUserId?.avatar_url || undefined}
-                        />
+                        <AvatarImage src={user?.avatar_url || undefined} />
                         <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white">
-                          {currentUserId?.first_name?.[0]}
-                          {currentUserId?.last_name?.[0]}
+                          {user?.first_name?.[0]}
+                          {user?.last_name?.[0]}
                         </AvatarFallback>
                       </Avatar>
                     </Button>
@@ -1114,11 +1112,9 @@ export default function Profile() {
                   >
                     <DropdownMenuLabel className="flex items-center gap-2 text-gray-900 dark:text-white">
                       <div className="flex-1">
-                        <p className="font-semibold">
-                          {currentUserId?.full_name}
-                        </p>
+                        <p className="font-semibold">{user?.full_name}</p>
                         <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                          {currentUserId?.position || "Employee"}
+                          {user?.position || "Employee"}
                         </p>
                       </div>
                     </DropdownMenuLabel>
