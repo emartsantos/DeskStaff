@@ -72,6 +72,17 @@ import {
   Trash2,
   Eye,
   EyeOff,
+  Building,
+  Mail,
+  Phone,
+  Globe as GlobeIcon,
+  FileText,
+  Award,
+  CalendarDays,
+  Clock,
+  TrendingUp,
+  Users as UsersIcon,
+  BriefcaseBusiness,
 } from "lucide-react";
 
 interface UserProfile {
@@ -89,6 +100,11 @@ interface UserProfile {
   website: string | null;
   privacy: "public" | "friends" | "private";
   created_at: string;
+  department?: string;
+  position?: string;
+  phone?: string;
+  hire_date?: string;
+  skills?: string[];
 }
 
 interface Post {
@@ -113,6 +129,8 @@ interface Friend {
   avatar_url: string | null;
   mutual_friends: number;
   status: "pending" | "accepted" | "requested";
+  department?: string;
+  position?: string;
 }
 
 export default function Profile() {
@@ -138,6 +156,10 @@ export default function Profile() {
     birthday: "",
     website: "",
     privacy: "public" as "public" | "friends" | "private",
+    department: "",
+    position: "",
+    phone: "",
+    hire_date: "",
   });
 
   // Password change state
@@ -271,6 +293,10 @@ export default function Profile() {
         birthday: userData.birthday || "",
         website: userData.website || "",
         privacy: userData.privacy || "public",
+        department: userData.department || "",
+        position: userData.position || "",
+        phone: userData.phone || "",
+        hire_date: userData.hire_date || "",
       });
     } catch (error) {
       console.error("Error:", error);
@@ -291,11 +317,11 @@ export default function Profile() {
         {
           id: "1",
           content:
-            "Just finished an amazing project! 🎉 Can't wait to share more details soon.",
+            "Just finished the Q3 project report ahead of schedule! Great teamwork from everyone involved. 🎯",
           image_url:
-            "https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=800&auto=format&fit=crop",
+            "https://images.unsplash.com/photo-1552664730-d307ca884978?w=800&auto=format&fit=crop",
           created_at: "2024-01-15T10:30:00Z",
-          likes_count: 42,
+          likes_count: 24,
           comments_count: 8,
           user: {
             id: "1",
@@ -308,10 +334,10 @@ export default function Profile() {
         {
           id: "2",
           content:
-            "Beautiful sunset at the beach today. Sometimes you just need to pause and appreciate the little things.",
+            "Team brainstorming session was incredibly productive today. Excited about the new initiatives for next quarter! 💡",
           image_url: null,
           created_at: "2024-01-14T18:45:00Z",
-          likes_count: 89,
+          likes_count: 42,
           comments_count: 12,
           user: {
             id: "1",
@@ -324,11 +350,11 @@ export default function Profile() {
         {
           id: "3",
           content:
-            "Learning new things every day! 🚀 Just completed an advanced React course.",
+            "Just completed the advanced leadership training course. Lots of valuable insights to implement! 🚀",
           image_url:
-            "https://images.unsplash.com/photo-1633356122544-f134324a6cee?w=800&auto=format&fit=crop",
+            "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800&auto=format&fit=crop",
           created_at: "2024-01-13T14:20:00Z",
-          likes_count: 56,
+          likes_count: 31,
           comments_count: 5,
           user: {
             id: "1",
@@ -353,15 +379,19 @@ export default function Profile() {
           id: "2",
           full_name: "Jane Smith",
           avatar_url: null,
-          mutual_friends: 12,
+          mutual_friends: 8,
           status: "accepted",
+          department: "Engineering",
+          position: "Senior Developer",
         },
         {
           id: "3",
           full_name: "Bob Johnson",
           avatar_url: null,
-          mutual_friends: 8,
+          mutual_friends: 12,
           status: "accepted",
+          department: "Marketing",
+          position: "Marketing Manager",
         },
         {
           id: "4",
@@ -369,6 +399,8 @@ export default function Profile() {
           avatar_url: null,
           mutual_friends: 5,
           status: "pending",
+          department: "HR",
+          position: "HR Specialist",
         },
         {
           id: "5",
@@ -376,6 +408,8 @@ export default function Profile() {
           avatar_url: null,
           mutual_friends: 3,
           status: "requested",
+          department: "Finance",
+          position: "Financial Analyst",
         },
       ];
       setFriends(mockFriends);
@@ -403,10 +437,7 @@ export default function Profile() {
 
       // Use a small delay to ensure toast is visible
       setTimeout(() => {
-        // Force navigation to login page with replace to prevent back navigation
         navigate("/", { replace: true });
-
-        // Force a reload to ensure all auth state is cleared
         window.location.href = "/";
       }, 500);
     } catch (error) {
@@ -437,6 +468,10 @@ export default function Profile() {
           birthday: editForm.birthday,
           website: editForm.website,
           privacy: editForm.privacy,
+          department: editForm.department,
+          position: editForm.position,
+          phone: editForm.phone,
+          hire_date: editForm.hire_date,
           updated_at: new Date().toISOString(),
         })
         .eq("id", authUser.id);
@@ -630,19 +665,19 @@ export default function Profile() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <Skeleton className="h-64 w-full rounded-lg" />
-          <div className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <Skeleton className="h-64 w-full rounded-xl" />
+          <div className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-6">
-              <Skeleton className="h-32 w-full rounded-lg" />
+              <Skeleton className="h-32 w-full rounded-xl" />
               {[1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-64 w-full rounded-lg" />
+                <Skeleton key={i} className="h-64 w-full rounded-xl" />
               ))}
             </div>
             <div className="space-y-6">
-              <Skeleton className="h-48 w-full rounded-lg" />
-              <Skeleton className="h-64 w-full rounded-lg" />
+              <Skeleton className="h-48 w-full rounded-xl" />
+              <Skeleton className="h-64 w-full rounded-xl" />
             </div>
           </div>
         </div>
@@ -652,66 +687,78 @@ export default function Profile() {
 
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
         {/* Header */}
-        <header className="sticky top-0 z-50 bg-white dark:bg-gray-800 border-b dark:border-gray-700">
+        <header className="sticky top-0 z-50 bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg border-b border-gray-200/50 dark:border-gray-700/50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-center justify-between h-16">
               <div className="flex items-center space-x-4">
-                <Link to="/" className="flex items-center space-x-2">
-                  <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                    <span className="text-white font-bold">F</span>
+                <Link to="/" className="flex items-center space-x-3">
+                  <div className="w-9 h-9 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
+                    <Building className="h-5 w-5 text-white" />
                   </div>
-                  <span className="text-xl font-semibold dark:text-white hidden sm:inline">
-                    SocialHub
+                  <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent dark:from-blue-400 dark:to-indigo-400">
+                    DeskStaff
                   </span>
                 </Link>
-                <div className="relative">
+                <div className="relative hidden md:block">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                   <Input
-                    placeholder="Search SocialHub"
-                    className="pl-10 w-64 bg-gray-100 dark:bg-gray-700 border-none"
+                    placeholder="Search colleagues, projects, or documents..."
+                    className="pl-10 w-64 bg-gray-100/50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600 focus:border-blue-500 focus:ring-blue-500"
                   />
                 </div>
               </div>
 
-              <div className="flex items-center space-x-4">
-                <Button variant="ghost" size="icon" className="rounded-full">
+              <div className="flex items-center space-x-3">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
+                  title="Home"
+                >
                   <Home className="h-5 w-5" />
                 </Button>
-                <Button variant="ghost" size="icon" className="rounded-full">
-                  <Users className="h-5 w-5" />
-                </Button>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="rounded-full relative"
-                >
-                  <MessageCircle className="h-5 w-5" />
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                    3
-                  </span>
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="rounded-full relative"
+                  className="rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 relative"
+                  title="Notifications"
                 >
                   <Bell className="h-5 w-5" />
                   <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
                     5
                   </span>
                 </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 relative"
+                  title="Messages"
+                >
+                  <MessageCircle className="h-5 w-5" />
+                  <span className="absolute -top-1 -right-1 bg-blue-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                    3
+                  </span>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
+                  title="Teams"
+                >
+                  <UsersIcon className="h-5 w-5" />
+                </Button>
 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="ghost"
-                      className="relative h-8 w-8 rounded-full"
+                      className="relative h-9 w-9 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
                     >
-                      <Avatar className="h-8 w-8">
+                      <Avatar className="h-9 w-9 ring-2 ring-white dark:ring-gray-700">
                         <AvatarImage src={user?.avatar_url || undefined} />
-                        <AvatarFallback>
+                        <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white">
                           {user?.first_name?.[0]}
                           {user?.last_name?.[0]}
                         </AvatarFallback>
@@ -719,11 +766,22 @@ export default function Profile() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent className="w-56" align="end">
-                    <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                    <DropdownMenuLabel className="flex items-center gap-2">
+                      <div className="flex-1">
+                        <p className="font-semibold">{user?.full_name}</p>
+                        <p className="text-xs text-gray-500 truncate">
+                          {user?.position || "Employee"}
+                        </p>
+                      </div>
+                    </DropdownMenuLabel>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => navigate("/profile")}>
                       <User className="mr-2 h-4 w-4" />
-                      Profile
+                      My Profile
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setIsEditing(true)}>
+                      <Edit className="mr-2 h-4 w-4" />
+                      Edit Profile
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => setIsPrivacyOpen(true)}>
                       <Shield className="mr-2 h-4 w-4" />
@@ -734,10 +792,6 @@ export default function Profile() {
                     >
                       <Key className="mr-2 h-4 w-4" />
                       Change Password
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setIsEditing(true)}>
-                      <Settings className="mr-2 h-4 w-4" />
-                      Edit Profile
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
@@ -755,51 +809,95 @@ export default function Profile() {
         </header>
 
         {/* Main Content */}
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           {/* Profile Header */}
-          <Card className="mb-8 overflow-hidden">
-            <div className="relative h-64 bg-gradient-to-r from-blue-500 to-purple-600">
-              <div className="absolute inset-0 bg-black/20" />
-              <Button
-                className="absolute top-4 right-4 bg-white/20 hover:bg-white/30 text-white border-none"
-                size="sm"
-                onClick={() =>
-                  toast.info("Cover photo editing feature coming soon!")
-                }
-              >
-                <Camera className="h-4 w-4 mr-2" />
-                Edit Cover
-              </Button>
+          <Card className="mb-6 overflow-hidden border-gray-200/50 dark:border-gray-700/50 shadow-lg">
+            <div className="relative h-56 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-600">
+              <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
+              <div className="absolute bottom-4 right-4 flex gap-2">
+                <Button
+                  className="bg-white/20 hover:bg-white/30 text-white border-none backdrop-blur-sm"
+                  size="sm"
+                  onClick={() =>
+                    toast.info("Cover photo editing feature coming soon!")
+                  }
+                >
+                  <Camera className="h-4 w-4 mr-2" />
+                  Edit Cover
+                </Button>
+                <Button
+                  className="bg-white/20 hover:bg-white/30 text-white border-none backdrop-blur-sm"
+                  size="sm"
+                  onClick={() => setIsEditing(true)}
+                >
+                  <Edit className="h-4 w-4 mr-2" />
+                  Edit Profile
+                </Button>
+              </div>
             </div>
 
-            <div className="relative px-8 pb-6">
+            <div className="relative px-6 pb-6">
               <div className="flex flex-col sm:flex-row items-start sm:items-end gap-6 -mt-16">
-                <Avatar className="h-32 w-32 border-4 border-white dark:border-gray-800 shadow-lg">
+                <Avatar className="h-32 w-32 border-4 border-white dark:border-gray-800 shadow-xl">
                   <AvatarImage src={user?.avatar_url || undefined} />
-                  <AvatarFallback className="text-3xl">
+                  <AvatarFallback className="text-3xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white">
                     {user?.first_name?.[0]}
                     {user?.last_name?.[0]}
                   </AvatarFallback>
                 </Avatar>
 
-                <div className="flex-1 space-y-2">
+                <div className="flex-1 space-y-4">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div>
-                      <h1 className="text-3xl font-bold dark:text-white">
-                        {user?.full_name}
-                      </h1>
-                      <p className="text-gray-600 dark:text-gray-300">
-                        {friends.length} friends
-                      </p>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-3">
+                        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+                          {user?.full_name}
+                        </h1>
+                        {user?.position && (
+                          <Badge
+                            variant="secondary"
+                            className="bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300"
+                          >
+                            {user.position}
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-4 text-gray-600 dark:text-gray-300">
+                        <div className="flex items-center gap-2">
+                          <Briefcase className="h-4 w-4" />
+                          <span>{user?.department || "Department"}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Users className="h-4 w-4" />
+                          <span>{friends.length} Connections</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <CalendarDays className="h-4 w-4" />
+                          <span>
+                            Joined{" "}
+                            {user?.created_at
+                              ? new Date(user.created_at).toLocaleDateString(
+                                  "en-US",
+                                  {
+                                    month: "short",
+                                    year: "numeric",
+                                  }
+                                )
+                              : "Recently"}
+                          </span>
+                        </div>
+                      </div>
                     </div>
 
                     <div className="flex items-center gap-2">
                       <Button
-                        className="bg-blue-600 hover:bg-blue-700 text-white"
-                        onClick={() => toast.success("Friend request sent!")}
+                        className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white"
+                        onClick={() =>
+                          toast.success("Connection request sent!")
+                        }
                       >
                         <UserPlus className="h-4 w-4 mr-2" />
-                        Add Friend
+                        Connect
                       </Button>
                       <Button
                         variant="outline"
@@ -845,34 +943,22 @@ export default function Profile() {
                       </DropdownMenu>
                     </div>
                   </div>
-
-                  <div className="flex flex-wrap gap-4 pt-4">
-                    <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
-                      <Briefcase className="h-4 w-4" />
-                      <span>{user?.workplace || "Add workplace"}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
-                      <School className="h-4 w-4" />
-                      <span>{user?.education || "Add education"}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
-                      <MapPin className="h-4 w-4" />
-                      <span>{user?.location || "Add location"}</span>
-                    </div>
-                  </div>
                 </div>
               </div>
             </div>
           </Card>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Left Column - Info & Friends */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Left Column - Info & Connections */}
             <div className="space-y-6">
               {/* Bio Card */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
-                    <span>Intro</span>
+              <Card className="border-gray-200/50 dark:border-gray-700/50">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center justify-between text-lg">
+                    <span className="flex items-center gap-2">
+                      <FileText className="h-5 w-5 text-blue-600" />
+                      Professional Summary
+                    </span>
                     {!isEditing && (
                       <Button
                         variant="ghost"
@@ -886,38 +972,52 @@ export default function Profile() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {user?.bio ? (
-                    <p className="text-gray-600 dark:text-gray-300">
+                    <p className="text-gray-600 dark:text-gray-300 leading-relaxed">
                       {user.bio}
                     </p>
                   ) : (
-                    <p className="text-gray-400 italic">No bio added yet</p>
+                    <p className="text-gray-400 italic">No summary added yet</p>
                   )}
 
-                  <div className="space-y-3">
+                  <Separator />
+
+                  <div className="space-y-4">
                     <div className="flex items-center gap-3">
-                      <Briefcase className="h-5 w-5 text-gray-400" />
-                      <div>
-                        <p className="font-medium">Works at</p>
+                      <div className="h-10 w-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                        <BriefcaseBusiness className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-medium text-gray-900 dark:text-white">
+                          Position
+                        </p>
                         <p className="text-gray-600 dark:text-gray-300">
-                          {user?.workplace || "Not specified"}
+                          {user?.position || "Not specified"}
                         </p>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-3">
-                      <School className="h-5 w-5 text-gray-400" />
-                      <div>
-                        <p className="font-medium">Studied at</p>
+                      <div className="h-10 w-10 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
+                        <Building className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-medium text-gray-900 dark:text-white">
+                          Department
+                        </p>
                         <p className="text-gray-600 dark:text-gray-300">
-                          {user?.education || "Not specified"}
+                          {user?.department || "Not specified"}
                         </p>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-3">
-                      <MapPin className="h-5 w-5 text-gray-400" />
-                      <div>
-                        <p className="font-medium">Lives in</p>
+                      <div className="h-10 w-10 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+                        <MapPin className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-medium text-gray-900 dark:text-white">
+                          Location
+                        </p>
                         <p className="text-gray-600 dark:text-gray-300">
                           {user?.location || "Not specified"}
                         </p>
@@ -925,122 +1025,138 @@ export default function Profile() {
                     </div>
 
                     <div className="flex items-center gap-3">
-                      <Calendar className="h-5 w-5 text-gray-400" />
-                      <div>
-                        <p className="font-medium">Born on</p>
-                        <p className="text-gray-600 dark:text-gray-300">
-                          {user?.birthday
-                            ? new Date(user.birthday).toLocaleDateString(
-                                "en-US",
-                                {
-                                  month: "long",
-                                  day: "numeric",
-                                  year: "numeric",
-                                }
-                              )
-                            : "Not specified"}
+                      <div className="h-10 w-10 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                        <Mail className="h-5 w-5 text-green-600 dark:text-green-400" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-medium text-gray-900 dark:text-white">
+                          Email
+                        </p>
+                        <p className="text-gray-600 dark:text-gray-300 truncate">
+                          {user?.email || "Not specified"}
                         </p>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-3">
-                      <Globe className="h-5 w-5 text-gray-400" />
-                      <div>
-                        <p className="font-medium">Website</p>
-                        {user?.website ? (
-                          <a
-                            href={user.website}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-600 hover:underline"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              toast.info(`Opening website: ${user.website}`);
-                              window.open(user.website!, "_blank");
-                            }}
-                          >
-                            {user.website}
-                          </a>
-                        ) : (
-                          <p className="text-gray-600 dark:text-gray-300">
-                            Not specified
+                    {user?.phone && (
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                          <Phone className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-medium text-gray-900 dark:text-white">
+                            Phone
                           </p>
-                        )}
+                          <p className="text-gray-600 dark:text-gray-300">
+                            {user.phone}
+                          </p>
+                        </div>
                       </div>
-                    </div>
+                    )}
+
+                    {user?.hire_date && (
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-lg bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                          <Calendar className="h-5 w-5 text-red-600 dark:text-red-400" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-medium text-gray-900 dark:text-white">
+                            Hire Date
+                          </p>
+                          <p className="text-gray-600 dark:text-gray-300">
+                            {new Date(user.hire_date).toLocaleDateString(
+                              "en-US",
+                              {
+                                month: "long",
+                                day: "numeric",
+                                year: "numeric",
+                              }
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Friends Card */}
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                  <div>
-                    <CardTitle>Friends</CardTitle>
-                    <CardDescription>{friends.length} friends</CardDescription>
+              {/* Connections Card */}
+              <Card className="border-gray-200/50 dark:border-gray-700/50">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="flex items-center gap-2">
+                        <UsersIcon className="h-5 w-5 text-blue-600" />
+                        Connections
+                      </CardTitle>
+                      <CardDescription>
+                        {friends.length} professional connections
+                      </CardDescription>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        toast.info("Connections page coming soon!")
+                      }
+                    >
+                      See all
+                    </Button>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => toast.info("Friends page coming soon!")}
-                  >
-                    See all
-                  </Button>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-3 gap-3">
                     {friends.slice(0, 9).map((friend) => (
-                      <div key={friend.id} className="space-y-1">
-                        <Avatar
-                          className="h-20 w-full rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
-                          onClick={() =>
-                            toast.info(`Viewing ${friend.full_name}'s profile`)
-                          }
-                        >
-                          <AvatarFallback>
-                            {friend.full_name
-                              .split(" ")
-                              .map((n) => n[0])
-                              .join("")}
-                          </AvatarFallback>
-                        </Avatar>
-                        <p className="text-xs font-medium truncate">
-                          {friend.full_name}
-                        </p>
-                        <div className="flex gap-1 mt-1">
+                      <div
+                        key={friend.id}
+                        className="group cursor-pointer space-y-2"
+                      >
+                        <div className="relative">
+                          <Avatar className="h-20 w-full rounded-xl border-2 border-transparent group-hover:border-blue-500 transition-all">
+                            <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white">
+                              {friend.full_name
+                                .split(" ")
+                                .map((n) => n[0])
+                                .join("")}
+                            </AvatarFallback>
+                          </Avatar>
                           {friend.status === "pending" && (
-                            <>
-                              <Button
-                                size="icon"
-                                className="h-6 w-6 bg-green-500 hover:bg-green-600"
-                                onClick={() =>
-                                  handleFriendRequest(friend.id, "accept")
-                                }
-                              >
-                                <Check className="h-3 w-3" />
-                              </Button>
-                              <Button
-                                size="icon"
-                                className="h-6 w-6 bg-red-500 hover:bg-red-600"
-                                onClick={() =>
-                                  handleFriendRequest(friend.id, "reject")
-                                }
-                              >
-                                <X className="h-3 w-3" />
-                              </Button>
-                            </>
+                            <div className="absolute -top-1 -right-1">
+                              <div className="flex gap-1">
+                                <Button
+                                  size="icon"
+                                  className="h-6 w-6 bg-green-500 hover:bg-green-600"
+                                  onClick={() =>
+                                    handleFriendRequest(friend.id, "accept")
+                                  }
+                                >
+                                  <Check className="h-3 w-3" />
+                                </Button>
+                                <Button
+                                  size="icon"
+                                  className="h-6 w-6 bg-red-500 hover:bg-red-600"
+                                  onClick={() =>
+                                    handleFriendRequest(friend.id, "reject")
+                                  }
+                                >
+                                  <X className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            </div>
                           )}
-                          {friend.status === "requested" && (
-                            <Button
-                              size="sm"
-                              className="h-6 text-xs bg-gray-500 hover:bg-gray-600"
-                              onClick={() =>
-                                handleFriendRequest(friend.id, "cancel")
-                              }
-                            >
-                              Cancel
-                            </Button>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-semibold truncate">
+                            {friend.full_name}
+                          </p>
+                          {friend.position && (
+                            <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                              {friend.position}
+                            </p>
                           )}
+                          <p className="text-xs text-gray-400 dark:text-gray-500">
+                            {friend.mutual_friends} mutual
+                          </p>
                         </div>
                       </div>
                     ))}
@@ -1048,22 +1164,24 @@ export default function Profile() {
                 </CardContent>
               </Card>
 
-              {/* Privacy Card */}
-              <Card>
-                <CardHeader>
+              {/* Skills & Privacy Card */}
+              <Card className="border-gray-200/50 dark:border-gray-700/50">
+                <CardHeader className="pb-3">
                   <CardTitle className="flex items-center gap-2">
-                    <Shield className="h-5 w-5" />
-                    Privacy
+                    <Award className="h-5 w-5 text-blue-600" />
+                    Skills & Privacy
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="font-medium">Profile Privacy</p>
+                      <p className="font-medium text-gray-900 dark:text-white">
+                        Profile Privacy
+                      </p>
                       <p className="text-sm text-gray-500 dark:text-gray-400">
                         {user?.privacy === "public" &&
                           "Public - Anyone can see your profile"}
-                        {user?.privacy === "friends" && "Friends only"}
+                        {user?.privacy === "friends" && "Connections only"}
                         {user?.privacy === "private" &&
                           "Private - Only you can see"}
                       </p>
@@ -1076,6 +1194,7 @@ export default function Profile() {
                             ? "secondary"
                             : "destructive"
                       }
+                      className="bg-gradient-to-r from-blue-500 to-indigo-600"
                     >
                       {user?.privacy?.charAt(0).toUpperCase() +
                         user?.privacy?.slice(1)}
@@ -1083,7 +1202,7 @@ export default function Profile() {
                   </div>
                   <Button
                     variant="outline"
-                    className="w-full"
+                    className="w-full border-gray-300 dark:border-gray-600"
                     onClick={() => setIsPrivacyOpen(true)}
                   >
                     <Settings className="h-4 w-4 mr-2" />
@@ -1093,39 +1212,39 @@ export default function Profile() {
               </Card>
             </div>
 
-            {/* Middle Column - Posts */}
+            {/* Middle Column - Posts & Activity */}
             <div className="lg:col-span-2 space-y-6">
               {/* Create Post */}
-              <Card>
+              <Card className="border-gray-200/50 dark:border-gray-700/50">
                 <CardContent className="pt-6">
                   <div className="flex gap-4">
-                    <Avatar>
+                    <Avatar className="h-12 w-12">
                       <AvatarImage src={user?.avatar_url || undefined} />
-                      <AvatarFallback>
+                      <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white">
                         {user?.first_name?.[0]}
                         {user?.last_name?.[0]}
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex-1 space-y-4">
                       <Textarea
-                        placeholder={`What's on your mind, ${user?.first_name}?`}
+                        placeholder={`What's on your mind, ${user?.first_name}? Share an update, article, or thought...`}
                         value={newPost}
                         onChange={(e) => setNewPost(e.target.value)}
-                        className="min-h-[100px] resize-none"
+                        className="min-h-[120px] resize-none border-gray-300 dark:border-gray-600 focus:border-blue-500"
                       />
 
                       {imagePreview && (
-                        <div className="relative">
+                        <div className="relative rounded-xl overflow-hidden">
                           <img
                             src={imagePreview}
                             alt="Preview"
-                            className="w-full max-h-96 object-cover rounded-lg"
+                            className="w-full max-h-96 object-cover"
                           />
                           <Button
                             type="button"
                             variant="destructive"
                             size="sm"
-                            className="absolute top-2 right-2"
+                            className="absolute top-3 right-3 backdrop-blur-sm"
                             onClick={removeImage}
                           >
                             <X className="h-4 w-4" />
@@ -1137,36 +1256,42 @@ export default function Profile() {
 
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
-                          <label className="flex items-center gap-2 cursor-pointer hover:text-blue-600">
+                          <label className="flex items-center gap-2 cursor-pointer text-gray-600 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 transition-colors">
                             <input
                               type="file"
                               accept="image/*"
                               className="hidden"
                               onChange={handleImageSelect}
                             />
-                            <ImageIcon className="h-5 w-5" />
+                            <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-900/30">
+                              <ImageIcon className="h-5 w-5" />
+                            </div>
                             <span className="hidden sm:inline">Photo</span>
                           </label>
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="gap-2"
+                            className="gap-2 text-gray-600 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400"
                             onClick={() =>
                               toast.info("Video upload coming soon!")
                             }
                           >
-                            <Video className="h-5 w-5" />
+                            <div className="p-2 rounded-lg bg-purple-50 dark:bg-purple-900/30">
+                              <Video className="h-5 w-5" />
+                            </div>
                             <span className="hidden sm:inline">Video</span>
                           </Button>
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="gap-2"
+                            className="gap-2 text-gray-600 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400"
                             onClick={() =>
                               toast.info("Feeling selection coming soon!")
                             }
                           >
-                            <Smile className="h-5 w-5" />
+                            <div className="p-2 rounded-lg bg-green-50 dark:bg-green-900/30">
+                              <Smile className="h-5 w-5" />
+                            </div>
                             <span className="hidden sm:inline">Feeling</span>
                           </Button>
                         </div>
@@ -1176,7 +1301,7 @@ export default function Profile() {
                           disabled={
                             isPosting || (!newPost.trim() && !selectedImage)
                           }
-                          className="bg-blue-600 hover:bg-blue-700"
+                          className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg"
                         >
                           {isPosting ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -1193,17 +1318,38 @@ export default function Profile() {
                 </CardContent>
               </Card>
 
-              {/* Posts */}
+              {/* Activity Tabs */}
               <Tabs value={activeTab} onValueChange={setActiveTab}>
-                <TabsList className="grid w-full grid-cols-3">
-                  <TabsTrigger value="posts">Posts</TabsTrigger>
-                  <TabsTrigger value="photos">Photos</TabsTrigger>
-                  <TabsTrigger value="videos">Videos</TabsTrigger>
+                <TabsList className="grid w-full grid-cols-3 bg-gray-100/50 dark:bg-gray-800/50 p-1 rounded-xl">
+                  <TabsTrigger
+                    value="posts"
+                    className="rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-gray-800 data-[state=active]:shadow-sm"
+                  >
+                    <FileText className="h-4 w-4 mr-2" />
+                    Posts
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="photos"
+                    className="rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-gray-800 data-[state=active]:shadow-sm"
+                  >
+                    <ImageIcon className="h-4 w-4 mr-2" />
+                    Photos
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="videos"
+                    className="rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-gray-800 data-[state=active]:shadow-sm"
+                  >
+                    <Video className="h-4 w-4 mr-2" />
+                    Videos
+                  </TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="posts" className="space-y-6">
+                <TabsContent value="posts" className="space-y-6 mt-6">
                   {posts.map((post) => (
-                    <Card key={post.id}>
+                    <Card
+                      key={post.id}
+                      className="border-gray-200/50 dark:border-gray-700/50 overflow-hidden"
+                    >
                       <CardContent className="pt-6">
                         <div className="flex items-start justify-between mb-4">
                           <div className="flex items-center gap-3">
@@ -1211,7 +1357,7 @@ export default function Profile() {
                               <AvatarImage
                                 src={post.user.avatar_url || undefined}
                               />
-                              <AvatarFallback>
+                              <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white">
                                 {post.user.full_name
                                   .split(" ")
                                   .map((n) => n[0])
@@ -1219,25 +1365,34 @@ export default function Profile() {
                               </AvatarFallback>
                             </Avatar>
                             <div>
-                              <p className="font-semibold">
+                              <p className="font-semibold text-gray-900 dark:text-white">
                                 {post.user.full_name}
                               </p>
-                              <p className="text-sm text-gray-500 dark:text-gray-400">
-                                {new Date(post.created_at).toLocaleDateString(
-                                  "en-US",
-                                  {
-                                    month: "long",
-                                    day: "numeric",
-                                    hour: "2-digit",
-                                    minute: "2-digit",
-                                  }
-                                )}
-                              </p>
+                              <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                                <Clock className="h-3 w-3" />
+                                <span>
+                                  {new Date(post.created_at).toLocaleDateString(
+                                    "en-US",
+                                    {
+                                      month: "short",
+                                      day: "numeric",
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    }
+                                  )}
+                                </span>
+                                <GlobeIcon className="h-3 w-3" />
+                                <span>Public</span>
+                              </div>
                             </div>
                           </div>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+                              >
                                 <MoreHorizontal className="h-4 w-4" />
                               </Button>
                             </DropdownMenuTrigger>
@@ -1254,7 +1409,7 @@ export default function Profile() {
                                 onClick={() => handleBookmarkPost(post.id)}
                               >
                                 <Bookmark
-                                  className={`mr-2 h-4 w-4 ${post.bookmarked ? "fill-current" : ""}`}
+                                  className={`mr-2 h-4 w-4 ${post.bookmarked ? "fill-current text-yellow-500" : ""}`}
                                 />
                                 {post.bookmarked
                                   ? "Remove from Bookmarks"
@@ -1277,43 +1432,45 @@ export default function Profile() {
                           </DropdownMenu>
                         </div>
 
-                        <p className="mb-4">{post.content}</p>
+                        <p className="mb-4 text-gray-700 dark:text-gray-300 leading-relaxed">
+                          {post.content}
+                        </p>
 
                         {post.image_url && (
-                          <div className="mb-4">
+                          <div className="mb-4 rounded-xl overflow-hidden">
                             <img
                               src={post.image_url}
                               alt="Post"
-                              className="w-full max-h-96 object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+                              className="w-full max-h-96 object-cover cursor-pointer hover:opacity-95 transition-opacity"
                               onClick={() => toast.info("Viewing full image")}
                             />
                           </div>
                         )}
 
-                        <div className="flex items-center justify-between text-gray-500 dark:text-gray-400">
-                          <div className="flex items-center gap-2">
+                        <div className="flex items-center justify-between text-gray-500 dark:text-gray-400 mb-4">
+                          <div className="flex items-center gap-3">
                             <div className="flex items-center -space-x-1">
-                              <div className="h-6 w-6 rounded-full bg-blue-500 flex items-center justify-center">
+                              <div className="h-6 w-6 rounded-full bg-blue-500 flex items-center justify-center ring-2 ring-white dark:ring-gray-800">
                                 <span className="text-xs text-white">👍</span>
                               </div>
-                              <div className="h-6 w-6 rounded-full bg-red-500 flex items-center justify-center">
+                              <div className="h-6 w-6 rounded-full bg-red-500 flex items-center justify-center ring-2 ring-white dark:ring-gray-800">
                                 <span className="text-xs text-white">❤️</span>
                               </div>
                             </div>
-                            <span>{post.likes_count} likes</span>
+                            <span>{post.likes_count} reactions</span>
                           </div>
                           <div>
                             <span>{post.comments_count} comments</span>
                           </div>
                         </div>
 
-                        <Separator className="my-4" />
+                        <Separator className="mb-4" />
 
-                        <div className="flex items-center justify-between">
+                        <div className="grid grid-cols-4 gap-1">
                           <Button
                             variant="ghost"
                             size="sm"
-                            className={`flex-1 gap-2 ${post.liked ? "text-blue-600" : ""}`}
+                            className={`gap-2 ${post.liked ? "text-blue-600" : "text-gray-600 dark:text-gray-400"}`}
                             onClick={() => handleLikePost(post.id)}
                           >
                             <Heart
@@ -1324,7 +1481,7 @@ export default function Profile() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="flex-1 gap-2"
+                            className="gap-2 text-gray-600 dark:text-gray-400"
                             onClick={() =>
                               toast.info("Comment feature coming soon!")
                             }
@@ -1335,7 +1492,7 @@ export default function Profile() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="flex-1 gap-2"
+                            className="gap-2 text-gray-600 dark:text-gray-400"
                             onClick={() => toast.success("Post shared!")}
                           >
                             <Share2 className="h-4 w-4" />
@@ -1344,12 +1501,13 @@ export default function Profile() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            className={`gap-2 ${post.bookmarked ? "text-yellow-600" : ""}`}
+                            className={`gap-2 ${post.bookmarked ? "text-yellow-600" : "text-gray-600 dark:text-gray-400"}`}
                             onClick={() => handleBookmarkPost(post.id)}
                           >
                             <Bookmark
                               className={`h-4 w-4 ${post.bookmarked ? "fill-current" : ""}`}
                             />
+                            Save
                           </Button>
                         </div>
                       </CardContent>
@@ -1358,40 +1516,58 @@ export default function Profile() {
                 </TabsContent>
 
                 <TabsContent value="photos">
-                  <Card>
+                  <Card className="border-gray-200/50 dark:border-gray-700/50">
                     <CardContent className="pt-6">
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                         {posts
                           .filter((p) => p.image_url)
                           .map((post) => (
-                            <div key={post.id} className="relative group">
+                            <div
+                              key={post.id}
+                              className="relative group rounded-xl overflow-hidden"
+                            >
                               <img
                                 src={post.image_url!}
                                 alt="Post"
-                                className="w-full h-48 object-cover rounded-lg cursor-pointer"
+                                className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"
                                 onClick={() =>
                                   toast.info("Viewing photo in full screen")
                                 }
                               />
-                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/50 transition-all rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100">
+                              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-between p-3">
+                                <div className="text-white">
+                                  <p className="text-sm font-medium truncate">
+                                    {post.user.full_name}
+                                  </p>
+                                  <p className="text-xs opacity-90">
+                                    {new Date(
+                                      post.created_at
+                                    ).toLocaleDateString("en-US", {
+                                      month: "short",
+                                      day: "numeric",
+                                    })}
+                                  </p>
+                                </div>
                                 <div className="flex gap-2">
                                   <Button
                                     size="sm"
                                     variant="secondary"
+                                    className="bg-white/20 backdrop-blur-sm hover:bg-white/30 text-white"
                                     onClick={() => handleLikePost(post.id)}
                                   >
                                     <Heart
-                                      className={`h-4 w-4 ${post.liked ? "fill-current" : ""}`}
+                                      className={`h-3 w-3 ${post.liked ? "fill-current" : ""}`}
                                     />
                                   </Button>
                                   <Button
                                     size="sm"
                                     variant="secondary"
+                                    className="bg-white/20 backdrop-blur-sm hover:bg-white/30 text-white"
                                     onClick={() =>
                                       toast.info("Comment on photo")
                                     }
                                   >
-                                    <MessageSquare className="h-4 w-4" />
+                                    <MessageSquare className="h-3 w-3" />
                                   </Button>
                                 </div>
                               </div>
@@ -1403,21 +1579,31 @@ export default function Profile() {
                 </TabsContent>
 
                 <TabsContent value="videos">
-                  <Card>
-                    <CardContent className="pt-6">
-                      <p className="text-gray-500 dark:text-gray-400 text-center py-8">
-                        No videos yet
-                      </p>
-                      <div className="text-center">
-                        <Button
-                          variant="outline"
-                          onClick={() =>
-                            toast.info("Video upload feature coming soon!")
-                          }
-                        >
-                          <Video className="h-4 w-4 mr-2" />
-                          Upload Your First Video
-                        </Button>
+                  <Card className="border-gray-200/50 dark:border-gray-700/50">
+                    <CardContent className="pt-6 text-center">
+                      <div className="py-12 space-y-4">
+                        <div className="h-16 w-16 mx-auto rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                          <Video className="h-8 w-8 text-gray-400" />
+                        </div>
+                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                          No videos yet
+                        </h3>
+                        <p className="text-gray-500 dark:text-gray-400 max-w-sm mx-auto">
+                          Share your first video to showcase your work or team
+                          activities
+                        </p>
+                        <div className="pt-4">
+                          <Button
+                            variant="outline"
+                            onClick={() =>
+                              toast.info("Video upload feature coming soon!")
+                            }
+                            className="border-gray-300 dark:border-gray-600"
+                          >
+                            <Video className="h-4 w-4 mr-2" />
+                            Upload Your First Video
+                          </Button>
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
@@ -1431,14 +1617,13 @@ export default function Profile() {
         <Dialog open={isEditing} onOpenChange={setIsEditing}>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Edit Profile</DialogTitle>
+              <DialogTitle className="text-xl">Edit Profile</DialogTitle>
               <DialogDescription>
-                Update your profile information. Changes will be visible to
-                other users.
+                Update your professional profile information.
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-6">
+            <div className="space-y-6 py-2">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="first_name">First Name</Label>
@@ -1448,6 +1633,7 @@ export default function Profile() {
                     onChange={(e) =>
                       setEditForm({ ...editForm, first_name: e.target.value })
                     }
+                    className="border-gray-300 dark:border-gray-600"
                   />
                 </div>
                 <div className="space-y-2">
@@ -1458,68 +1644,130 @@ export default function Profile() {
                     onChange={(e) =>
                       setEditForm({ ...editForm, last_name: e.target.value })
                     }
+                    className="border-gray-300 dark:border-gray-600"
                   />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="bio">Bio</Label>
+                <Label htmlFor="bio">Professional Summary</Label>
                 <Textarea
                   id="bio"
                   value={editForm.bio}
                   onChange={(e) =>
                     setEditForm({ ...editForm, bio: e.target.value })
                   }
-                  placeholder="Tell people about yourself"
+                  placeholder="Tell people about your professional background and expertise..."
+                  className="min-h-[100px] border-gray-300 dark:border-gray-600"
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="location">Location</Label>
-                <Input
-                  id="location"
-                  value={editForm.location}
-                  onChange={(e) =>
-                    setEditForm({ ...editForm, location: e.target.value })
-                  }
-                  placeholder="City, Country"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="department">Department</Label>
+                  <Input
+                    id="department"
+                    value={editForm.department}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, department: e.target.value })
+                    }
+                    placeholder="Engineering, Marketing, HR, etc."
+                    className="border-gray-300 dark:border-gray-600"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="position">Position</Label>
+                  <Input
+                    id="position"
+                    value={editForm.position}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, position: e.target.value })
+                    }
+                    placeholder="Your job title"
+                    className="border-gray-300 dark:border-gray-600"
+                  />
+                </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="workplace">Workplace</Label>
-                <Input
-                  id="workplace"
-                  value={editForm.workplace}
-                  onChange={(e) =>
-                    setEditForm({ ...editForm, workplace: e.target.value })
-                  }
-                  placeholder="Where do you work?"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="location">Location</Label>
+                  <Input
+                    id="location"
+                    value={editForm.location}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, location: e.target.value })
+                    }
+                    placeholder="City, Country"
+                    className="border-gray-300 dark:border-gray-600"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Phone</Label>
+                  <Input
+                    id="phone"
+                    value={editForm.phone}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, phone: e.target.value })
+                    }
+                    placeholder="+1 (555) 123-4567"
+                    className="border-gray-300 dark:border-gray-600"
+                  />
+                </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="education">Education</Label>
-                <Input
-                  id="education"
-                  value={editForm.education}
-                  onChange={(e) =>
-                    setEditForm({ ...editForm, education: e.target.value })
-                  }
-                  placeholder="Your educational background"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="workplace">Company</Label>
+                  <Input
+                    id="workplace"
+                    value={editForm.workplace}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, workplace: e.target.value })
+                    }
+                    placeholder="Your company name"
+                    className="border-gray-300 dark:border-gray-600"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="hire_date">Hire Date</Label>
+                  <Input
+                    id="hire_date"
+                    type="date"
+                    value={editForm.hire_date}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, hire_date: e.target.value })
+                    }
+                    className="border-gray-300 dark:border-gray-600"
+                  />
+                </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="birthday">Birthday</Label>
-                <Input
-                  id="birthday"
-                  type="date"
-                  value={editForm.birthday}
-                  onChange={(e) =>
-                    setEditForm({ ...editForm, birthday: e.target.value })
-                  }
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="education">Education</Label>
+                  <Input
+                    id="education"
+                    value={editForm.education}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, education: e.target.value })
+                    }
+                    placeholder="Your educational background"
+                    className="border-gray-300 dark:border-gray-600"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="birthday">Birthday</Label>
+                  <Input
+                    id="birthday"
+                    type="date"
+                    value={editForm.birthday}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, birthday: e.target.value })
+                    }
+                    className="border-gray-300 dark:border-gray-600"
+                  />
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -1530,7 +1778,8 @@ export default function Profile() {
                   onChange={(e) =>
                     setEditForm({ ...editForm, website: e.target.value })
                   }
-                  placeholder="https://example.com"
+                  placeholder="https://yourportfolio.com"
+                  className="border-gray-300 dark:border-gray-600"
                 />
               </div>
 
@@ -1545,7 +1794,7 @@ export default function Profile() {
                     onClick={() =>
                       setEditForm({ ...editForm, privacy: "public" })
                     }
-                    className="justify-start gap-2"
+                    className="justify-start gap-2 border-gray-300 dark:border-gray-600"
                   >
                     <Globe className="h-4 w-4" />
                     Public
@@ -1558,10 +1807,10 @@ export default function Profile() {
                     onClick={() =>
                       setEditForm({ ...editForm, privacy: "friends" })
                     }
-                    className="justify-start gap-2"
+                    className="justify-start gap-2 border-gray-300 dark:border-gray-600"
                   >
                     <Users className="h-4 w-4" />
-                    Friends
+                    Connections Only
                   </Button>
                   <Button
                     type="button"
@@ -1571,7 +1820,7 @@ export default function Profile() {
                     onClick={() =>
                       setEditForm({ ...editForm, privacy: "private" })
                     }
-                    className="justify-start gap-2"
+                    className="justify-start gap-2 border-gray-300 dark:border-gray-600"
                   >
                     <Lock className="h-4 w-4" />
                     Private
@@ -1581,10 +1830,19 @@ export default function Profile() {
             </div>
 
             <DialogFooter>
-              <Button variant="outline" onClick={() => setIsEditing(false)}>
+              <Button
+                variant="outline"
+                onClick={() => setIsEditing(false)}
+                className="border-gray-300 dark:border-gray-600"
+              >
                 Cancel
               </Button>
-              <Button onClick={handleUpdateProfile}>Save Changes</Button>
+              <Button
+                onClick={handleUpdateProfile}
+                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+              >
+                Save Changes
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -1603,6 +1861,7 @@ export default function Profile() {
               <Button
                 variant="outline"
                 onClick={() => setIsLogoutDialogOpen(false)}
+                className="border-gray-300 dark:border-gray-600"
               >
                 Cancel
               </Button>
@@ -1642,6 +1901,7 @@ export default function Profile() {
                         currentPassword: e.target.value,
                       })
                     }
+                    className="border-gray-300 dark:border-gray-600"
                   />
                   <Button
                     type="button"
@@ -1672,6 +1932,7 @@ export default function Profile() {
                         newPassword: e.target.value,
                       })
                     }
+                    className="border-gray-300 dark:border-gray-600"
                   />
                   <Button
                     type="button"
@@ -1702,6 +1963,7 @@ export default function Profile() {
                         confirmPassword: e.target.value,
                       })
                     }
+                    className="border-gray-300 dark:border-gray-600"
                   />
                   <Button
                     type="button"
@@ -1724,12 +1986,14 @@ export default function Profile() {
               <Button
                 variant="outline"
                 onClick={() => setIsChangePasswordOpen(false)}
+                className="border-gray-300 dark:border-gray-600"
               >
                 Cancel
               </Button>
               <Button
                 onClick={handleChangePassword}
                 disabled={isChangingPassword}
+                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
               >
                 {isChangingPassword ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -1746,7 +2010,7 @@ export default function Profile() {
             <DialogHeader>
               <DialogTitle>Privacy Settings</DialogTitle>
               <DialogDescription>
-                Control who can see your profile and activity.
+                Control who can see your profile and activity on DeskStaff.
               </DialogDescription>
             </DialogHeader>
 
@@ -1760,7 +2024,7 @@ export default function Profile() {
                     </p>
                   </div>
                   <select
-                    className="border rounded-md px-3 py-2"
+                    className="border rounded-lg px-3 py-2 border-gray-300 dark:border-gray-600 bg-transparent"
                     value={editForm.privacy}
                     onChange={(e) =>
                       setEditForm({
@@ -1773,7 +2037,7 @@ export default function Profile() {
                     }
                   >
                     <option value="public">Public</option>
-                    <option value="friends">Friends Only</option>
+                    <option value="friends">Connections Only</option>
                     <option value="private">Private</option>
                   </select>
                 </div>
@@ -1788,22 +2052,22 @@ export default function Profile() {
                         Who can see your email?
                       </p>
                     </div>
-                    <select className="border rounded-md px-3 py-2">
+                    <select className="border rounded-lg px-3 py-2 border-gray-300 dark:border-gray-600 bg-transparent">
                       <option>Only Me</option>
-                      <option>Friends</option>
+                      <option>Connections</option>
                     </select>
                   </div>
 
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="font-medium">Friends List</p>
+                      <p className="font-medium">Connections List</p>
                       <p className="text-sm text-gray-500 dark:text-gray-400">
-                        Who can see your friends?
+                        Who can see your connections?
                       </p>
                     </div>
-                    <select className="border rounded-md px-3 py-2">
+                    <select className="border rounded-lg px-3 py-2 border-gray-300 dark:border-gray-600 bg-transparent">
                       <option>Public</option>
-                      <option>Friends Only</option>
+                      <option>Connections Only</option>
                       <option>Only Me</option>
                     </select>
                   </div>
@@ -1815,9 +2079,9 @@ export default function Profile() {
                         Default audience for new posts
                       </p>
                     </div>
-                    <select className="border rounded-md px-3 py-2">
+                    <select className="border rounded-lg px-3 py-2 border-gray-300 dark:border-gray-600 bg-transparent">
                       <option>Public</option>
-                      <option>Friends Only</option>
+                      <option>Connections Only</option>
                       <option>Only Me</option>
                     </select>
                   </div>
@@ -1826,7 +2090,11 @@ export default function Profile() {
             </div>
 
             <DialogFooter>
-              <Button variant="outline" onClick={() => setIsPrivacyOpen(false)}>
+              <Button
+                variant="outline"
+                onClick={() => setIsPrivacyOpen(false)}
+                className="border-gray-300 dark:border-gray-600"
+              >
                 Cancel
               </Button>
               <Button
@@ -1835,6 +2103,7 @@ export default function Profile() {
                   setIsPrivacyOpen(false);
                   toast.success("Privacy settings updated");
                 }}
+                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
               >
                 Save Privacy Settings
               </Button>
