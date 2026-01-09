@@ -1114,9 +1114,11 @@ export default function Profile() {
                   >
                     <DropdownMenuLabel className="flex items-center gap-2 text-gray-900 dark:text-white">
                       <div className="flex-1">
-                        <p className="font-semibold">{user?.full_name}</p>
+                        <p className="font-semibold">
+                          {currentUserId?.full_name}
+                        </p>
                         <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                          {user?.position || "Employee"}
+                          {currentUserId?.position || "Employee"}
                         </p>
                       </div>
                     </DropdownMenuLabel>
