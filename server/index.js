@@ -5,7 +5,7 @@ import { ServerRouter, UNSAFE_withComponentProps, Outlet, UNSAFE_withErrorBounda
 import { isbot } from "isbot";
 import { renderToPipeableStream } from "react-dom/server";
 import * as React from "react";
-import { createContext, useState, useEffect } from "react";
+import { createContext, useState, useEffect, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { Slot } from "@radix-ui/react-slot";
 import { cva } from "class-variance-authority";
@@ -13,14 +13,15 @@ import { clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 import * as LabelPrimitive from "@radix-ui/react-label";
 import * as CheckboxPrimitive from "@radix-ui/react-checkbox";
-import { CheckIcon, Sun, Moon, Loader2, AlertCircle, Mail, Lock, EyeOff, Eye, LogIn, AlertTriangle, MailCheck, XCircle, Info, UserX, ShieldAlert, MailWarning, CheckCircle, Key, Verified, RefreshCw, XIcon, Building, Search, Home, Bell, MessageCircle, Users, Camera, User, Edit, Shield, LogOut, X, Image, Video, Smile, Send, Clock, Globe, MoreHorizontal, Bookmark, Trash2, Heart, MessageSquare, Share2, BriefcaseBusiness, MapPin, Phone, Calendar, UserPlus, Check, Briefcase, CalendarDays, Award, Settings, FileText } from "lucide-react";
+import { CheckIcon, Sun, Moon, Loader2, AlertCircle, Mail, Lock, EyeOff, Eye, LogIn, AlertTriangle, MailCheck, XCircle, Info, UserX, ShieldAlert, MailWarning, CheckCircle, Key, Verified, RefreshCw, Building, Search, Home, Bell, MessageCircle, Users, Camera, User, Edit, Shield, LogOut, X, Image, Video, Smile, Send, Trash2, Heart, Share2, XIcon, BriefcaseBusiness, MapPin, Phone, Calendar, UserPlus, MessageSquare, Check, Briefcase, CalendarDays, Clock, MoreHorizontal, Bookmark, Award, Settings, FileText, Globe } from "lucide-react";
 import { toast } from "sonner";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import * as ProgressPrimitive from "@radix-ui/react-progress";
 import * as SeparatorPrimitive from "@radix-ui/react-separator";
 import * as AvatarPrimitive from "@radix-ui/react-avatar";
-import * as TabsPrimitive from "@radix-ui/react-tabs";
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
+import { formatDistanceToNow } from "date-fns";
+import * as TabsPrimitive from "@radix-ui/react-tabs";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 const streamTimeout = 5e3;
 function handleRequest(request, responseStatusCode, responseHeaders, routerContext, loadContext) {
@@ -109,90 +110,16 @@ const useTheme = () => {
   }
   return context;
 };
-class CacheBustManager {
-  static instance;
-  version = Date.now();
-  subscribers = [];
-  constructor() {
-  }
-  static getInstance() {
-    if (!CacheBustManager.instance) {
-      CacheBustManager.instance = new CacheBustManager();
-    }
-    return CacheBustManager.instance;
-  }
-  getVersion() {
-    return this.version;
-  }
-  bust() {
-    this.version = Date.now();
-    this.notifySubscribers();
-  }
-  subscribe(callback2) {
-    this.subscribers.push(callback2);
-    return () => {
-      this.subscribers = this.subscribers.filter((cb) => cb !== callback2);
-    };
-  }
-  notifySubscribers() {
-    this.subscribers.forEach((callback2) => callback2());
-  }
-  // Helper to add cache busting to any URL
-  bustUrl(url) {
-    if (!url) return url;
-    try {
-      const urlObj = new URL(url);
-      urlObj.searchParams.set("_cb", this.version.toString());
-      return urlObj.toString();
-    } catch {
-      return url;
-    }
-  }
-  // Helper to bust all Supabase storage URLs
-  bustSupabaseUrl(url) {
-    if (!url || !url.includes("supabase.co")) return url;
-    return this.bustUrl(url);
-  }
-}
-const cacheBust = CacheBustManager.getInstance();
 const supabaseUrl = "https://zmkgfngbmyzewbkhxffe.supabase.co";
 const supabaseAnonKey = "sb_publishable_QQR1p7r0-ZoxvQ6r0DR1gQ_pWSOebv8";
 const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true
-  },
-  global: {
-    // Global fetch options for cache control
-    fetch: (input, init) => {
-      const fetchInit = init ? { ...init } : {};
-      if (!fetchInit.headers) {
-        fetchInit.headers = {};
-      }
-      let headers;
-      if (fetchInit.headers instanceof Headers) {
-        headers = fetchInit.headers;
-      } else if (typeof fetchInit.headers === "object") {
-        headers = new Headers(fetchInit.headers);
-      } else {
-        headers = new Headers();
-      }
-      headers.set("Cache-Control", "no-cache, no-store, must-revalidate");
-      headers.set("Pragma", "no-cache");
-      headers.set("Expires", "0");
-      headers.set("X-Cache-Bust", cacheBust.getVersion().toString());
-      fetchInit.headers = headers;
-      if (typeof input === "string" && input.includes("storage/v1/object")) {
-        const bustedUrl = cacheBust.bustSupabaseUrl(input);
-        return fetch(bustedUrl, fetchInit);
-      }
-      return fetch(input, fetchInit);
-    }
+    autoRefreshToken: true
   }
 });
 const bustGlobalCache = () => {
-  cacheBust.bust();
+  localStorage.setItem("cache_bust", Date.now().toString());
 };
 const AuthContext = createContext(void 0);
 const AuthProvider = ({ children }) => {
@@ -2731,64 +2658,6 @@ function AvatarFallback({
     }
   );
 }
-function Tabs({
-  className,
-  ...props
-}) {
-  return /* @__PURE__ */ jsx(
-    TabsPrimitive.Root,
-    {
-      "data-slot": "tabs",
-      className: cn("flex flex-col gap-2", className),
-      ...props
-    }
-  );
-}
-function TabsList({
-  className,
-  ...props
-}) {
-  return /* @__PURE__ */ jsx(
-    TabsPrimitive.List,
-    {
-      "data-slot": "tabs-list",
-      className: cn(
-        "bg-muted text-muted-foreground inline-flex h-9 w-fit items-center justify-center rounded-lg p-[3px]",
-        className
-      ),
-      ...props
-    }
-  );
-}
-function TabsTrigger({
-  className,
-  ...props
-}) {
-  return /* @__PURE__ */ jsx(
-    TabsPrimitive.Trigger,
-    {
-      "data-slot": "tabs-trigger",
-      className: cn(
-        "data-[state=active]:bg-background dark:data-[state=active]:text-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:outline-ring dark:data-[state=active]:border-input dark:data-[state=active]:bg-input/30 text-foreground dark:text-muted-foreground inline-flex h-[calc(100%-1px)] flex-1 items-center justify-center gap-1.5 rounded-md border border-transparent px-2 py-1 text-sm font-medium whitespace-nowrap transition-[color,box-shadow] focus-visible:ring-[3px] focus-visible:outline-1 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:shadow-sm [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
-        className
-      ),
-      ...props
-    }
-  );
-}
-function TabsContent({
-  className,
-  ...props
-}) {
-  return /* @__PURE__ */ jsx(
-    TabsPrimitive.Content,
-    {
-      "data-slot": "tabs-content",
-      className: cn("flex-1 outline-none", className),
-      ...props
-    }
-  );
-}
 function DropdownMenu({
   ...props
 }) {
@@ -2870,139 +2739,6 @@ function DropdownMenuSeparator({
     {
       "data-slot": "dropdown-menu-separator",
       className: cn("bg-border -mx-1 my-1 h-px", className),
-      ...props
-    }
-  );
-}
-function Dialog({
-  ...props
-}) {
-  return /* @__PURE__ */ jsx(DialogPrimitive.Root, { "data-slot": "dialog", ...props });
-}
-function DialogPortal({
-  ...props
-}) {
-  return /* @__PURE__ */ jsx(DialogPrimitive.Portal, { "data-slot": "dialog-portal", ...props });
-}
-function DialogOverlay({
-  className,
-  ...props
-}) {
-  return /* @__PURE__ */ jsx(
-    DialogPrimitive.Overlay,
-    {
-      "data-slot": "dialog-overlay",
-      className: cn(
-        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/50",
-        className
-      ),
-      ...props
-    }
-  );
-}
-function DialogContent({
-  className,
-  children,
-  showCloseButton = true,
-  ...props
-}) {
-  return /* @__PURE__ */ jsxs(DialogPortal, { "data-slot": "dialog-portal", children: [
-    /* @__PURE__ */ jsx(DialogOverlay, {}),
-    /* @__PURE__ */ jsxs(
-      DialogPrimitive.Content,
-      {
-        "data-slot": "dialog-content",
-        className: cn(
-          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200 outline-none sm:max-w-lg",
-          className
-        ),
-        ...props,
-        children: [
-          children,
-          showCloseButton && /* @__PURE__ */ jsxs(
-            DialogPrimitive.Close,
-            {
-              "data-slot": "dialog-close",
-              className: "ring-offset-background focus:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
-              children: [
-                /* @__PURE__ */ jsx(XIcon, {}),
-                /* @__PURE__ */ jsx("span", { className: "sr-only", children: "Close" })
-              ]
-            }
-          )
-        ]
-      }
-    )
-  ] });
-}
-function DialogHeader({ className, ...props }) {
-  return /* @__PURE__ */ jsx(
-    "div",
-    {
-      "data-slot": "dialog-header",
-      className: cn("flex flex-col gap-2 text-center sm:text-left", className),
-      ...props
-    }
-  );
-}
-function DialogFooter({ className, ...props }) {
-  return /* @__PURE__ */ jsx(
-    "div",
-    {
-      "data-slot": "dialog-footer",
-      className: cn(
-        "flex flex-col-reverse gap-2 sm:flex-row sm:justify-end",
-        className
-      ),
-      ...props
-    }
-  );
-}
-function DialogTitle({
-  className,
-  ...props
-}) {
-  return /* @__PURE__ */ jsx(
-    DialogPrimitive.Title,
-    {
-      "data-slot": "dialog-title",
-      className: cn("text-lg leading-none font-semibold", className),
-      ...props
-    }
-  );
-}
-function DialogDescription({
-  className,
-  ...props
-}) {
-  return /* @__PURE__ */ jsx(
-    DialogPrimitive.Description,
-    {
-      "data-slot": "dialog-description",
-      className: cn("text-muted-foreground text-sm", className),
-      ...props
-    }
-  );
-}
-function Textarea({ className, ...props }) {
-  return /* @__PURE__ */ jsx(
-    "textarea",
-    {
-      "data-slot": "textarea",
-      className: cn(
-        "border-input placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:bg-input/30 flex field-sizing-content min-h-16 w-full rounded-md border bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
-        className
-      ),
-      ...props
-    }
-  );
-}
-function Skeleton({ className, ...props }) {
-  return /* @__PURE__ */ jsx(
-    "div",
-    {
-      "data-slot": "skeleton",
-      className: cn("bg-accent animate-pulse rounded-md", className),
       ...props
     }
   );
@@ -3351,11 +3087,26 @@ function Header({
     ] })
   ] }) }) });
 }
+function Textarea({ className, ...props }) {
+  return /* @__PURE__ */ jsx(
+    "textarea",
+    {
+      "data-slot": "textarea",
+      className: cn(
+        "border-input placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:bg-input/30 flex field-sizing-content min-h-16 w-full rounded-md border bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
+        className
+      ),
+      ...props
+    }
+  );
+}
 function CreatePost({
   user,
   onSubmit,
   placeholder = "What's on your mind?",
-  disabled = false
+  disabled = false,
+  onPostCreated,
+  autoSave = true
 }) {
   const [newPost, setNewPost] = useState("");
   const [selectedImage, setSelectedImage] = useState(null);
@@ -3365,6 +3116,11 @@ function CreatePost({
     const file = e.target.files?.[0];
     if (file) {
       if (file.size > 5 * 1024 * 1024) {
+        toast.error("Image size should be less than 5MB");
+        return;
+      }
+      if (!file.type.startsWith("image/")) {
+        toast.error("Please select an image file");
         return;
       }
       setSelectedImage(file);
@@ -3380,39 +3136,74 @@ function CreatePost({
     setImagePreview(null);
   };
   const handleSubmit = async () => {
-    if (!newPost.trim() && !selectedImage) return;
+    if (!user?.id) {
+      toast.error("Please sign in to create a post");
+      return;
+    }
+    if (!newPost.trim() && !selectedImage) {
+      toast.error("Post cannot be empty");
+      return;
+    }
     setIsPosting(true);
     try {
-      await onSubmit(newPost, selectedImage || void 0);
+      let result;
+      if (onSubmit) {
+        result = await onSubmit(newPost, selectedImage || void 0);
+      } else if (autoSave) {
+        toast.error(
+          "CreatePost component requires onSubmit prop when autoSave is true"
+        );
+        return;
+      }
       setNewPost("");
       setSelectedImage(null);
       setImagePreview(null);
+      if (onPostCreated && result) {
+        onPostCreated(result);
+      }
+      if (!onSubmit) {
+        toast.success("Post created successfully!");
+      }
     } catch (error) {
       console.error("Error creating post:", error);
+      toast.error(error.message || "Failed to create post");
     } finally {
       setIsPosting(false);
     }
   };
-  return /* @__PURE__ */ jsx(Card, { className: "border-gray-200/50 dark:border-gray-700/50 bg-white dark:bg-gray-900", children: /* @__PURE__ */ jsx(CardContent, { className: "pt-6", children: /* @__PURE__ */ jsxs("div", { className: "flex gap-4", children: [
+  const handleKeyDown = (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+      e.preventDefault();
+      handleSubmit();
+    }
+  };
+  return /* @__PURE__ */ jsx(Card, { className: "border-gray-200/50 dark:border-gray-700/50 bg-white dark:bg-gray-900 shadow-sm", children: /* @__PURE__ */ jsx(CardContent, { className: "pt-6", children: /* @__PURE__ */ jsxs("div", { className: "flex gap-4", children: [
     /* @__PURE__ */ jsxs(Avatar, { className: "h-12 w-12", children: [
-      /* @__PURE__ */ jsx(AvatarImage, { src: user?.avatar_url || void 0 }),
+      /* @__PURE__ */ jsx(
+        AvatarImage,
+        {
+          src: user?.avatar_url || void 0,
+          alt: user?.full_name || "User"
+        }
+      ),
       /* @__PURE__ */ jsxs(AvatarFallback, { className: "bg-gradient-to-br from-blue-500 to-indigo-600 text-white", children: [
-        user?.first_name?.[0],
-        user?.last_name?.[0]
+        user?.first_name?.[0] || "",
+        user?.last_name?.[0] || ""
       ] })
     ] }),
     /* @__PURE__ */ jsxs("div", { className: "flex-1 space-y-4", children: [
       /* @__PURE__ */ jsx(
         Textarea,
         {
-          placeholder: `${placeholder} ${user?.first_name}?`,
+          placeholder: `${placeholder} ${user?.first_name || ""}?`,
           value: newPost,
           onChange: (e) => setNewPost(e.target.value),
-          className: "min-h-[120px] resize-none border-gray-300 dark:border-gray-600 focus:border-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400",
+          onKeyDown: handleKeyDown,
+          className: "min-h-[120px] resize-none border-gray-300 dark:border-gray-600 focus:border-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 text-base",
           disabled: disabled || isPosting
         }
       ),
-      imagePreview && /* @__PURE__ */ jsxs("div", { className: "relative rounded-xl overflow-hidden", children: [
+      imagePreview && /* @__PURE__ */ jsxs("div", { className: "relative rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700", children: [
         /* @__PURE__ */ jsx(
           "img",
           {
@@ -3427,7 +3218,7 @@ function CreatePost({
             type: "button",
             variant: "destructive",
             size: "sm",
-            className: "absolute top-3 right-3 backdrop-blur-sm",
+            className: "absolute top-3 right-3 backdrop-blur-sm bg-red-500/80 hover:bg-red-600/80",
             onClick: removeImage,
             disabled: isPosting,
             children: /* @__PURE__ */ jsx(X, { className: "h-4 w-4" })
@@ -3445,11 +3236,11 @@ function CreatePost({
                 accept: "image/*",
                 className: "hidden",
                 onChange: handleImageSelect,
-                disabled: isPosting
+                disabled: isPosting || disabled
               }
             ),
-            /* @__PURE__ */ jsx("div", { className: "p-2 rounded-lg bg-blue-50 dark:bg-blue-900/30", children: /* @__PURE__ */ jsx(Image, { className: "h-5 w-5" }) }),
-            /* @__PURE__ */ jsx("span", { className: "hidden sm:inline", children: "Photo" })
+            /* @__PURE__ */ jsx("div", { className: "p-2 rounded-lg bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors", children: /* @__PURE__ */ jsx(Image, { className: "h-5 w-5" }) }),
+            /* @__PURE__ */ jsx("span", { className: "hidden sm:inline font-medium", children: "Photo" })
           ] }),
           /* @__PURE__ */ jsxs(
             Button,
@@ -3457,10 +3248,11 @@ function CreatePost({
               variant: "ghost",
               size: "sm",
               className: "gap-2 text-gray-600 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400",
-              disabled: isPosting,
+              disabled: isPosting || disabled,
+              onClick: () => toast.info("Video upload coming soon!"),
               children: [
-                /* @__PURE__ */ jsx("div", { className: "p-2 rounded-lg bg-purple-50 dark:bg-purple-900/30", children: /* @__PURE__ */ jsx(Video, { className: "h-5 w-5" }) }),
-                /* @__PURE__ */ jsx("span", { className: "hidden sm:inline", children: "Video" })
+                /* @__PURE__ */ jsx("div", { className: "p-2 rounded-lg bg-purple-50 dark:bg-purple-900/30 hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors", children: /* @__PURE__ */ jsx(Video, { className: "h-5 w-5" }) }),
+                /* @__PURE__ */ jsx("span", { className: "hidden sm:inline font-medium", children: "Video" })
               ]
             }
           ),
@@ -3470,225 +3262,1023 @@ function CreatePost({
               variant: "ghost",
               size: "sm",
               className: "gap-2 text-gray-600 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400",
-              disabled: isPosting,
+              disabled: isPosting || disabled,
+              onClick: () => toast.info("Feeling picker coming soon!"),
               children: [
-                /* @__PURE__ */ jsx("div", { className: "p-2 rounded-lg bg-green-50 dark:bg-green-900/30", children: /* @__PURE__ */ jsx(Smile, { className: "h-5 w-5" }) }),
-                /* @__PURE__ */ jsx("span", { className: "hidden sm:inline", children: "Feeling" })
+                /* @__PURE__ */ jsx("div", { className: "p-2 rounded-lg bg-green-50 dark:bg-green-900/30 hover:bg-green-100 dark:hover:bg-green-900/50 transition-colors", children: /* @__PURE__ */ jsx(Smile, { className: "h-5 w-5" }) }),
+                /* @__PURE__ */ jsx("span", { className: "hidden sm:inline font-medium", children: "Feeling" })
               ]
             }
           )
         ] }),
-        /* @__PURE__ */ jsx(
-          Button,
-          {
-            onClick: handleSubmit,
-            disabled: isPosting || !newPost.trim() && !selectedImage || disabled,
-            className: "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg",
-            children: isPosting ? /* @__PURE__ */ jsx(Loader2, { className: "h-4 w-4 animate-spin" }) : /* @__PURE__ */ jsxs(Fragment, { children: [
-              /* @__PURE__ */ jsx(Send, { className: "h-4 w-4 mr-2" }),
-              "Post"
-            ] })
-          }
-        )
+        /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-3", children: [
+          newPost.trim() || selectedImage ? /* @__PURE__ */ jsx(
+            Button,
+            {
+              variant: "outline",
+              size: "sm",
+              onClick: () => {
+                setNewPost("");
+                removeImage();
+              },
+              disabled: isPosting || disabled,
+              className: "text-gray-600 dark:text-gray-300",
+              children: "Cancel"
+            }
+          ) : null,
+          /* @__PURE__ */ jsx(
+            Button,
+            {
+              onClick: handleSubmit,
+              disabled: isPosting || disabled || !newPost.trim() && !selectedImage,
+              className: "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg transition-all duration-200 hover:shadow-xl",
+              children: isPosting ? /* @__PURE__ */ jsxs(Fragment, { children: [
+                /* @__PURE__ */ jsx(Loader2, { className: "h-4 w-4 animate-spin mr-2" }),
+                "Posting..."
+              ] }) : /* @__PURE__ */ jsxs(Fragment, { children: [
+                /* @__PURE__ */ jsx(Send, { className: "h-4 w-4 mr-2" }),
+                "Post"
+              ] })
+            }
+          )
+        ] })
       ] })
     ] })
   ] }) }) });
 }
-function Post({
-  id,
-  content,
-  image_url,
-  created_at,
-  likes_count,
-  comments_count,
-  user,
-  liked,
-  bookmarked,
-  isOwnPost = false,
-  onLike,
-  onBookmark,
-  onComment,
-  onShare,
-  onEdit,
-  onDelete,
-  showActions = true
-}) {
-  const formattedDate = new Date(created_at).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit"
-  });
-  return /* @__PURE__ */ jsx(Card, { className: "border-gray-200/50 dark:border-gray-700/50 overflow-hidden bg-white dark:bg-gray-900", children: /* @__PURE__ */ jsxs(CardContent, { className: "pt-6", children: [
-    /* @__PURE__ */ jsxs("div", { className: "flex items-start justify-between mb-4", children: [
-      /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-3", children: [
-        /* @__PURE__ */ jsxs(Avatar, { children: [
-          /* @__PURE__ */ jsx(AvatarImage, { src: user.avatar_url || void 0 }),
-          /* @__PURE__ */ jsx(AvatarFallback, { className: "bg-gradient-to-br from-blue-500 to-indigo-600 text-white", children: user.full_name.split(" ").map((n) => n[0]).join("") })
-        ] }),
-        /* @__PURE__ */ jsxs("div", { children: [
-          /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2", children: [
-            /* @__PURE__ */ jsx("p", { className: "font-semibold text-gray-900 dark:text-white", children: user.full_name }),
-            isOwnPost && /* @__PURE__ */ jsx(
-              Badge,
-              {
-                variant: "outline",
-                className: "text-xs bg-blue-50 dark:bg-blue-900/20",
-                children: "You"
-              }
-            )
-          ] }),
-          /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400", children: [
-            /* @__PURE__ */ jsx(Clock, { className: "h-3 w-3" }),
-            /* @__PURE__ */ jsx("span", { children: formattedDate }),
-            /* @__PURE__ */ jsx(Globe, { className: "h-3 w-3" }),
-            /* @__PURE__ */ jsx("span", { children: "Public" })
-          ] })
-        ] })
-      ] }),
-      showActions && /* @__PURE__ */ jsxs(DropdownMenu, { children: [
-        /* @__PURE__ */ jsx(DropdownMenuTrigger, { asChild: true, children: /* @__PURE__ */ jsx(
-          Button,
-          {
-            variant: "ghost",
-            size: "sm",
-            className: "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300",
-            children: /* @__PURE__ */ jsx(MoreHorizontal, { className: "h-4 w-4" })
-          }
-        ) }),
-        /* @__PURE__ */ jsxs(DropdownMenuContent, { className: "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700", children: [
-          isOwnPost && onEdit && /* @__PURE__ */ jsxs(
-            DropdownMenuItem,
-            {
-              onClick: () => onEdit(id),
-              className: "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700",
-              children: [
-                /* @__PURE__ */ jsx(Edit, { className: "mr-2 h-4 w-4" }),
-                "Edit Post"
-              ]
-            }
+const POSTS_PER_PAGE = 10;
+function usePosts(userId) {
+  const [posts, setPosts2] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [hasMore, setHasMore] = useState(true);
+  const [page, setPage] = useState(0);
+  const fetchPosts = useCallback(
+    async (pageNum = 0, append = false) => {
+      try {
+        setLoading(true);
+        setError(null);
+        const from = pageNum * POSTS_PER_PAGE;
+        const to = from + POSTS_PER_PAGE - 1;
+        let query = supabase.from("posts").select(
+          `
+          *,
+          user:users (
+            id,
+            full_name,
+            avatar_url,
+            first_name,
+            last_name
           ),
-          /* @__PURE__ */ jsxs(
-            DropdownMenuItem,
-            {
-              onClick: () => onBookmark(id),
-              className: "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700",
-              children: [
-                /* @__PURE__ */ jsx(
-                  Bookmark,
+          likes:post_likes(count),
+          comments:post_comments(count),
+          bookmarks:post_bookmarks(count)
+        `,
+          { count: "exact" }
+        ).order("created_at", { ascending: false }).range(from, to);
+        if (userId) {
+          query = query.eq("user_id", userId);
+        }
+        const { data, error: fetchError, count } = await query;
+        if (fetchError) {
+          throw fetchError;
+        }
+        if (append) {
+          setPosts2((prev) => [...prev, ...data || []]);
+        } else {
+          setPosts2(data || []);
+        }
+        if (count !== null) {
+          setHasMore((pageNum + 1) * POSTS_PER_PAGE < count);
+        }
+        return data || [];
+      } catch (err) {
+        console.error("Error fetching posts:", err);
+        setError(err.message || "Failed to load posts");
+        toast.error("Failed to load posts");
+        return [];
+      } finally {
+        setLoading(false);
+      }
+    },
+    [userId]
+  );
+  useEffect(() => {
+    fetchPosts(0, false);
+    setPage(0);
+    const channel = supabase.channel("posts-realtime").on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "posts"
+      },
+      async (payload) => {
+        const { data: newPost } = await supabase.from("posts").select(
+          `
+              *,
+              user:users (
+                id,
+                full_name,
+                avatar_url,
+                first_name,
+                last_name
+              ),
+              likes:post_likes(count),
+              comments:post_comments(count),
+              bookmarks:post_bookmarks(count)
+            `
+        ).eq("id", payload.new.id).single();
+        if (newPost) {
+          setPosts2((prev) => [newPost, ...prev]);
+        }
+      }
+    ).on(
+      "postgres_changes",
+      {
+        event: "DELETE",
+        schema: "public",
+        table: "posts"
+      },
+      (payload) => {
+        setPosts2((prev) => prev.filter((post) => post.id !== payload.old.id));
+      }
+    ).subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchPosts]);
+  const loadMore = async () => {
+    if (loading || !hasMore) return;
+    const nextPage = page + 1;
+    await fetchPosts(nextPage, true);
+    setPage(nextPage);
+  };
+  const createPost = async (content, image) => {
+    try {
+      setLoading(true);
+      const {
+        data: { user }
+      } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error("You must be logged in to create a post");
+      }
+      let imageUrl;
+      if (image) {
+        try {
+          const fileExt = image.name.split(".").pop();
+          const timestamp = Date.now();
+          const randomStr = Math.random().toString(36).substring(2, 9);
+          const fileName = `post_${timestamp}_${randomStr}.${fileExt}`;
+          const filePath = `posts/${user.id}/${fileName}`;
+          const { error: uploadError } = await supabase.storage.from("post_images").upload(filePath, image, {
+            cacheControl: "3600",
+            upsert: false,
+            contentType: image.type
+          });
+          if (uploadError) throw uploadError;
+          const {
+            data: { publicUrl }
+          } = supabase.storage.from("post_images").getPublicUrl(filePath);
+          imageUrl = `${publicUrl}?t=${timestamp}`;
+        } catch (uploadErr) {
+          console.error("Error uploading image:", uploadErr);
+          toast.error("Failed to upload image. Post created without image.");
+        }
+      }
+      const { data, error: createError } = await supabase.from("posts").insert([
+        {
+          user_id: user.id,
+          content: content.trim(),
+          image_url: imageUrl
+        }
+      ]).select(
+        `
+          *,
+          user:users (
+            id,
+            full_name,
+            avatar_url,
+            first_name,
+            last_name
+          ),
+          likes:post_likes(count),
+          comments:post_comments(count),
+          bookmarks:post_bookmarks(count)
+        `
+      ).single();
+      if (createError) throw createError;
+      return data;
+    } catch (err) {
+      console.error("Error creating post:", err);
+      toast.error(err.message || "Failed to create post");
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+  const deletePost = async (postId) => {
+    try {
+      const {
+        data: { user }
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("You must be logged in");
+      const post = posts.find((p) => p.id === postId);
+      if (!post) throw new Error("Post not found");
+      if (post.user_id !== user.id) {
+        throw new Error("You can only delete your own posts");
+      }
+      const { error: error2 } = await supabase.from("posts").delete().eq("id", postId);
+      if (error2) throw error2;
+    } catch (err) {
+      console.error("Error deleting post:", err);
+      toast.error(err.message || "Failed to delete post");
+      throw err;
+    }
+  };
+  const likePost = async (postId) => {
+    try {
+      const {
+        data: { user }
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("You must be logged in to like a post");
+      const { error: error2 } = await supabase.from("post_likes").insert([{ post_id: postId, user_id: user.id }]);
+      if (error2) {
+        if (error2.code === "23505") {
+          await unlikePost(postId);
+          return;
+        }
+        throw error2;
+      }
+      setPosts2(
+        (prev) => prev.map((post) => {
+          if (post.id === postId) {
+            return {
+              ...post,
+              likes: [{ count: (post.likes[0]?.count || 0) + 1 }]
+            };
+          }
+          return post;
+        })
+      );
+    } catch (err) {
+      console.error("Error liking post:", err);
+      toast.error(err.message || "Failed to like post");
+    }
+  };
+  const unlikePost = async (postId) => {
+    try {
+      const {
+        data: { user }
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("You must be logged in to unlike a post");
+      const { error: error2 } = await supabase.from("post_likes").delete().eq("post_id", postId).eq("user_id", user.id);
+      if (error2) throw error2;
+      setPosts2(
+        (prev) => prev.map((post) => {
+          if (post.id === postId) {
+            return {
+              ...post,
+              likes: [{ count: Math.max(0, (post.likes[0]?.count || 0) - 1) }]
+            };
+          }
+          return post;
+        })
+      );
+    } catch (err) {
+      console.error("Error unliking post:", err);
+      toast.error(err.message || "Failed to unlike post");
+    }
+  };
+  const bookmarkPost = async (postId) => {
+    try {
+      const {
+        data: { user }
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("You must be logged in to bookmark a post");
+      const { error: error2 } = await supabase.from("post_bookmarks").insert([{ post_id: postId, user_id: user.id }]);
+      if (error2) {
+        if (error2.code === "23505") {
+          await unbookmarkPost(postId);
+          return;
+        }
+        throw error2;
+      }
+      setPosts2(
+        (prev) => prev.map((post) => {
+          if (post.id === postId) {
+            return {
+              ...post,
+              bookmarks: [{ count: (post.bookmarks[0]?.count || 0) + 1 }]
+            };
+          }
+          return post;
+        })
+      );
+    } catch (err) {
+      console.error("Error bookmarking post:", err);
+      toast.error(err.message || "Failed to bookmark post");
+    }
+  };
+  const unbookmarkPost = async (postId) => {
+    try {
+      const {
+        data: { user }
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("You must be logged in to unbookmark a post");
+      const { error: error2 } = await supabase.from("post_bookmarks").delete().eq("post_id", postId).eq("user_id", user.id);
+      if (error2) throw error2;
+      setPosts2(
+        (prev) => prev.map((post) => {
+          if (post.id === postId) {
+            return {
+              ...post,
+              bookmarks: [
+                { count: Math.max(0, (post.bookmarks[0]?.count || 0) - 1) }
+              ]
+            };
+          }
+          return post;
+        })
+      );
+    } catch (err) {
+      console.error("Error unbookmarking post:", err);
+      toast.error(err.message || "Failed to unbookmark post");
+    }
+  };
+  const addComment = async (postId, content) => {
+    try {
+      const {
+        data: { user }
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("You must be logged in to comment");
+      const { error: error2 } = await supabase.from("post_comments").insert([
+        { post_id: postId, user_id: user.id, content: content.trim() }
+      ]);
+      if (error2) throw error2;
+      setPosts2(
+        (prev) => prev.map((post) => {
+          if (post.id === postId) {
+            return {
+              ...post,
+              comments: [{ count: (post.comments[0]?.count || 0) + 1 }]
+            };
+          }
+          return post;
+        })
+      );
+    } catch (err) {
+      console.error("Error adding comment:", err);
+      toast.error(err.message || "Failed to add comment");
+    }
+  };
+  const refreshPosts = async () => {
+    await fetchPosts(0, false);
+    setPage(0);
+  };
+  return {
+    posts,
+    loading,
+    error,
+    hasMore,
+    createPost,
+    deletePost,
+    likePost,
+    unlikePost,
+    bookmarkPost,
+    unbookmarkPost,
+    addComment,
+    loadMore,
+    refreshPosts
+  };
+}
+function PostsFeed({ currentUser }) {
+  const {
+    posts,
+    loading,
+    createPost,
+    deletePost,
+    likePost,
+    unlikePost,
+    bookmarkPost,
+    unbookmarkPost,
+    addComment,
+    loadMore,
+    hasMore
+  } = usePosts();
+  const [deletingId, setDeletingId] = useState(null);
+  const handleCreatePost = async (content, image) => {
+    try {
+      const result = await createPost(content, image);
+      if (result) {
+        toast.success("Post created successfully!");
+      }
+    } catch (error) {
+      console.error("Error creating post:", error);
+    }
+  };
+  const handleDeletePost = async (postId) => {
+    setDeletingId(postId);
+    try {
+      await deletePost(postId);
+      toast.success("Post deleted successfully!");
+    } catch (error) {
+      toast.error(error.message || "Failed to delete post");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+  const handleLike = async (postId) => {
+    const post = posts.find((p) => p.id === postId);
+    if (post) {
+      const isLiked = post.likes?.[0]?.count > 0;
+      try {
+        if (isLiked) {
+          await unlikePost(postId);
+          toast.info("Post unliked");
+        } else {
+          await likePost(postId);
+          toast.success("Post liked!");
+        }
+      } catch (error) {
+        console.error("Error toggling like:", error);
+      }
+    }
+  };
+  const handleBookmark = async (postId) => {
+    const post = posts.find((p) => p.id === postId);
+    if (post) {
+      const isBookmarked = post.bookmarks?.[0]?.count > 0;
+      try {
+        if (isBookmarked) {
+          await unbookmarkPost(postId);
+          toast.info("Post removed from bookmarks");
+        } else {
+          await bookmarkPost(postId);
+          toast.success("Post bookmarked!");
+        }
+      } catch (error) {
+        console.error("Error toggling bookmark:", error);
+      }
+    }
+  };
+  const handleComment = async (postId) => {
+    const content = prompt("Enter your comment:");
+    if (content && content.trim()) {
+      try {
+        await addComment(postId, content);
+        toast.success("Comment added!");
+      } catch (error) {
+        console.error("Error adding comment:", error);
+      }
+    }
+  };
+  if (loading && posts.length === 0) {
+    return /* @__PURE__ */ jsx("div", { className: "flex justify-center py-8", children: /* @__PURE__ */ jsx(Loader2, { className: "h-8 w-8 animate-spin text-blue-500" }) });
+  }
+  return /* @__PURE__ */ jsxs("div", { className: "space-y-6 max-w-2xl mx-auto", children: [
+    /* @__PURE__ */ jsx(
+      CreatePost,
+      {
+        user: currentUser,
+        onSubmit: handleCreatePost,
+        placeholder: "What's on your mind?"
+      }
+    ),
+    /* @__PURE__ */ jsxs("div", { className: "space-y-4", children: [
+      posts.map((post) => /* @__PURE__ */ jsx(
+        Card,
+        {
+          className: "overflow-hidden border-gray-200/50 dark:border-gray-700/50 bg-white dark:bg-gray-900",
+          children: /* @__PURE__ */ jsxs(CardContent, { className: "p-6", children: [
+            /* @__PURE__ */ jsxs("div", { className: "flex items-start justify-between mb-4", children: [
+              /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-3", children: [
+                /* @__PURE__ */ jsxs(Avatar, { className: "h-10 w-10", children: [
+                  /* @__PURE__ */ jsx(AvatarImage, { src: post.user.avatar_url || void 0 }),
+                  /* @__PURE__ */ jsxs(AvatarFallback, { className: "bg-gradient-to-br from-blue-500 to-indigo-600 text-white", children: [
+                    post.user.first_name?.[0],
+                    post.user.last_name?.[0]
+                  ] })
+                ] }),
+                /* @__PURE__ */ jsxs("div", { children: [
+                  /* @__PURE__ */ jsx("h3", { className: "font-semibold text-gray-900 dark:text-white", children: post.user.full_name }),
+                  /* @__PURE__ */ jsx("p", { className: "text-sm text-gray-500 dark:text-gray-400", children: formatDistanceToNow(new Date(post.created_at), {
+                    addSuffix: true
+                  }) })
+                ] })
+              ] }),
+              post.user_id === currentUser.id && /* @__PURE__ */ jsx(
+                Button,
+                {
+                  variant: "ghost",
+                  size: "sm",
+                  onClick: () => handleDeletePost(post.id),
+                  disabled: deletingId === post.id,
+                  className: "text-gray-500 hover:text-red-500",
+                  title: "Delete post",
+                  children: deletingId === post.id ? /* @__PURE__ */ jsx(Loader2, { className: "h-4 w-4 animate-spin" }) : /* @__PURE__ */ jsx(Trash2, { className: "h-4 w-4" })
+                }
+              )
+            ] }),
+            /* @__PURE__ */ jsx("div", { className: "mb-4", children: /* @__PURE__ */ jsx("p", { className: "text-gray-800 dark:text-gray-200 whitespace-pre-wrap", children: post.content }) }),
+            post.image_url && /* @__PURE__ */ jsx("div", { className: "mb-4 rounded-lg overflow-hidden", children: /* @__PURE__ */ jsx(
+              "img",
+              {
+                src: post.image_url,
+                alt: "Post",
+                className: "w-full max-h-[500px] object-cover cursor-pointer hover:opacity-95 transition-opacity",
+                onClick: () => window.open(post.image_url, "_blank"),
+                loading: "lazy"
+              }
+            ) }),
+            /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between text-sm text-gray-500 dark:text-gray-400 mb-4", children: [
+              /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-6", children: [
+                /* @__PURE__ */ jsxs(
+                  "button",
                   {
-                    className: `mr-2 h-4 w-4 ${bookmarked ? "fill-current text-yellow-500" : ""}`
+                    onClick: () => handleLike(post.id),
+                    className: "flex items-center gap-1 hover:text-blue-600 dark:hover:text-blue-400 transition-colors",
+                    children: [
+                      /* @__PURE__ */ jsx(
+                        Heart,
+                        {
+                          className: `h-4 w-4 ${post.likes?.[0]?.count > 0 ? "fill-red-500 text-red-500" : ""}`
+                        }
+                      ),
+                      post.likes?.[0]?.count || 0
+                    ]
                   }
                 ),
-                bookmarked ? "Remove from Bookmarks" : "Save Post"
-              ]
-            }
-          ),
-          isOwnPost && onDelete && /* @__PURE__ */ jsxs(Fragment, { children: [
-            /* @__PURE__ */ jsx(DropdownMenuSeparator, { className: "bg-gray-200 dark:bg-gray-700" }),
-            /* @__PURE__ */ jsxs(
-              DropdownMenuItem,
-              {
-                className: "text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20",
-                onClick: () => onDelete(id),
-                children: [
-                  /* @__PURE__ */ jsx(Trash2, { className: "mr-2 h-4 w-4" }),
-                  "Delete Post"
-                ]
-              }
-            )
-          ] })
-        ] })
-      ] })
-    ] }),
-    /* @__PURE__ */ jsx("p", { className: "mb-4 text-gray-700 dark:text-gray-300 leading-relaxed", children: content }),
-    image_url && /* @__PURE__ */ jsx("div", { className: "mb-4 rounded-xl overflow-hidden", children: /* @__PURE__ */ jsx(
-      "img",
-      {
-        src: image_url,
-        alt: "Post",
-        className: "w-full max-h-96 object-cover cursor-pointer hover:opacity-95 transition-opacity"
-      }
-    ) }),
-    /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between text-gray-500 dark:text-gray-400 mb-4", children: [
-      /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-3", children: [
-        /* @__PURE__ */ jsxs("div", { className: "flex items-center -space-x-1", children: [
-          /* @__PURE__ */ jsx("div", { className: "h-6 w-6 rounded-full bg-blue-500 flex items-center justify-center ring-2 ring-white dark:ring-gray-800", children: /* @__PURE__ */ jsx("span", { className: "text-xs text-white", children: "👍" }) }),
-          /* @__PURE__ */ jsx("div", { className: "h-6 w-6 rounded-full bg-red-500 flex items-center justify-center ring-2 ring-white dark:ring-gray-800", children: /* @__PURE__ */ jsx("span", { className: "text-xs text-white", children: "❤️" }) })
-        ] }),
-        /* @__PURE__ */ jsxs("span", { children: [
-          likes_count,
-          " reactions"
-        ] })
-      ] }),
-      /* @__PURE__ */ jsx("div", { children: /* @__PURE__ */ jsxs("span", { children: [
-        comments_count,
-        " comments"
-      ] }) })
-    ] }),
-    showActions && /* @__PURE__ */ jsxs(Fragment, { children: [
-      /* @__PURE__ */ jsx(Separator, { className: "mb-4 bg-gray-200 dark:bg-gray-700" }),
-      /* @__PURE__ */ jsxs("div", { className: "grid grid-cols-4 gap-1", children: [
-        /* @__PURE__ */ jsxs(
-          Button,
-          {
-            variant: "ghost",
-            size: "sm",
-            className: `gap-2 ${liked ? "text-blue-600" : "text-gray-600 dark:text-gray-400"}`,
-            onClick: () => onLike(id),
-            children: [
-              /* @__PURE__ */ jsx(Heart, { className: `h-4 w-4 ${liked ? "fill-current" : ""}` }),
-              liked ? "Liked" : "Like"
-            ]
-          }
-        ),
-        /* @__PURE__ */ jsxs(
-          Button,
-          {
-            variant: "ghost",
-            size: "sm",
-            className: "gap-2 text-gray-600 dark:text-gray-400",
-            onClick: () => onComment?.(id),
-            children: [
-              /* @__PURE__ */ jsx(MessageSquare, { className: "h-4 w-4" }),
-              "Comment"
-            ]
-          }
-        ),
-        /* @__PURE__ */ jsxs(
-          Button,
-          {
-            variant: "ghost",
-            size: "sm",
-            className: "gap-2 text-gray-600 dark:text-gray-400",
-            onClick: () => onShare?.(id),
-            children: [
-              /* @__PURE__ */ jsx(Share2, { className: "h-4 w-4" }),
-              "Share"
-            ]
-          }
-        ),
-        /* @__PURE__ */ jsxs(
-          Button,
-          {
-            variant: "ghost",
-            size: "sm",
-            className: `gap-2 ${bookmarked ? "text-yellow-600" : "text-gray-600 dark:text-gray-400"}`,
-            onClick: () => onBookmark(id),
-            children: [
+                /* @__PURE__ */ jsxs(
+                  "button",
+                  {
+                    onClick: () => handleComment(post.id),
+                    className: "flex items-center gap-1 hover:text-blue-600 dark:hover:text-blue-400 transition-colors",
+                    children: [
+                      /* @__PURE__ */ jsx(MessageCircle, { className: "h-4 w-4" }),
+                      post.comments?.[0]?.count || 0,
+                      " comments"
+                    ]
+                  }
+                )
+              ] }),
               /* @__PURE__ */ jsx(
-                Bookmark,
+                "button",
                 {
-                  className: `h-4 w-4 ${bookmarked ? "fill-current" : ""}`
+                  onClick: () => handleBookmark(post.id),
+                  className: "hover:text-yellow-600 dark:hover:text-yellow-400 transition-colors",
+                  title: post.bookmarks?.[0]?.count > 0 ? "Remove bookmark" : "Bookmark post",
+                  children: /* @__PURE__ */ jsx(
+                    "svg",
+                    {
+                      className: `h-4 w-4 ${post.bookmarks?.[0]?.count > 0 ? "fill-yellow-500 text-yellow-500" : ""}`,
+                      fill: "none",
+                      stroke: "currentColor",
+                      viewBox: "0 0 24 24",
+                      children: /* @__PURE__ */ jsx(
+                        "path",
+                        {
+                          strokeLinecap: "round",
+                          strokeLinejoin: "round",
+                          strokeWidth: 2,
+                          d: "M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"
+                        }
+                      )
+                    }
+                  )
+                }
+              )
+            ] }),
+            /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2 pt-4 border-t border-gray-200 dark:border-gray-700", children: [
+              /* @__PURE__ */ jsxs(
+                Button,
+                {
+                  variant: "ghost",
+                  size: "sm",
+                  className: "flex-1 gap-2",
+                  onClick: () => handleLike(post.id),
+                  children: [
+                    /* @__PURE__ */ jsx(
+                      Heart,
+                      {
+                        className: `h-5 w-5 ${post.likes?.[0]?.count > 0 ? "fill-red-500 text-red-500" : ""}`
+                      }
+                    ),
+                    post.likes?.[0]?.count > 0 ? "Liked" : "Like"
+                  ]
                 }
               ),
-              "Save"
-            ]
-          }
-        )
-      ] })
+              /* @__PURE__ */ jsxs(
+                Button,
+                {
+                  variant: "ghost",
+                  size: "sm",
+                  className: "flex-1 gap-2",
+                  onClick: () => handleComment(post.id),
+                  children: [
+                    /* @__PURE__ */ jsx(MessageCircle, { className: "h-5 w-5" }),
+                    "Comment"
+                  ]
+                }
+              ),
+              /* @__PURE__ */ jsxs(
+                Button,
+                {
+                  variant: "ghost",
+                  size: "sm",
+                  className: "flex-1 gap-2",
+                  onClick: () => {
+                    navigator.clipboard.writeText(
+                      `${window.location.origin}/post/${post.id}`
+                    );
+                    toast.success("Link copied to clipboard!");
+                  },
+                  children: [
+                    /* @__PURE__ */ jsx(Share2, { className: "h-5 w-5" }),
+                    "Share"
+                  ]
+                }
+              )
+            ] })
+          ] })
+        },
+        post.id
+      )),
+      hasMore && /* @__PURE__ */ jsx("div", { className: "text-center pt-4", children: /* @__PURE__ */ jsxs(
+        Button,
+        {
+          variant: "outline",
+          onClick: loadMore,
+          disabled: loading,
+          className: "mx-auto",
+          children: [
+            loading ? /* @__PURE__ */ jsx(Loader2, { className: "h-4 w-4 animate-spin mr-2" }) : null,
+            "Load More Posts"
+          ]
+        }
+      ) })
     ] })
-  ] }) });
+  ] });
+}
+function useAuth() {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const fetchUserProfile = async (authUser) => {
+    try {
+      console.log("🔍 Fetching user profile for:", authUser.id);
+      const { data: profile2, error: profileError } = await supabase.from("users").select("*").eq("id", authUser.id).single();
+      if (profileError) {
+        console.error("Profile error:", profileError);
+        if (profileError.code === "PGRST116" || profileError.message?.includes("No rows found")) {
+          console.log("Creating new user profile...");
+          const userData = {
+            id: authUser.id,
+            email: authUser.email,
+            first_name: authUser.user_metadata?.first_name || "",
+            last_name: authUser.user_metadata?.last_name || "",
+            full_name: authUser.user_metadata?.full_name || `${authUser.user_metadata?.first_name || ""} ${authUser.user_metadata?.last_name || ""}`.trim() || authUser.email?.split("@")[0] || "User",
+            avatar_url: authUser.user_metadata?.avatar_url || null,
+            bio: null,
+            location: null,
+            workplace: null,
+            education: null,
+            birthday: null,
+            website: null,
+            privacy: "public",
+            created_at: (/* @__PURE__ */ new Date()).toISOString(),
+            updated_at: (/* @__PURE__ */ new Date()).toISOString(),
+            logged_in: true,
+            last_seen: null
+          };
+          const { data: newProfile, error: insertError } = await supabase.from("users").insert([userData]).select().single();
+          if (insertError) {
+            console.error("Error creating user profile:", insertError);
+            throw insertError;
+          }
+          console.log("✅ New user profile created:", newProfile);
+          setUser(newProfile);
+          return;
+        }
+        throw profileError;
+      }
+      console.log("✅ User profile loaded:", profile2);
+      setUser(profile2);
+    } catch (err) {
+      console.error("❌ Error fetching user profile:", err);
+      setError(err.message || "Failed to load user profile");
+    }
+  };
+  const initializeAuth = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      console.log("🔄 Initializing auth...");
+      const {
+        data: { session },
+        error: sessionError
+      } = await supabase.auth.getSession();
+      if (sessionError) {
+        console.error("Session error:", sessionError);
+        throw sessionError;
+      }
+      console.log("Session:", session ? "Found" : "Not found");
+      if (session?.user) {
+        await fetchUserProfile(session.user);
+      } else {
+        setUser(null);
+      }
+    } catch (err) {
+      console.error("❌ Auth initialization error:", err);
+      setError(err.message || "Failed to initialize authentication");
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => {
+    initializeAuth();
+    const {
+      data: { subscription }
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log(
+        "Auth state changed:",
+        event,
+        session ? "User found" : "No user"
+      );
+      if (session?.user) {
+        await fetchUserProfile(session.user);
+      } else {
+        setUser(null);
+      }
+      setLoading(false);
+    });
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+  const signOut = async () => {
+    try {
+      console.log("Signing out...");
+      const { error: error2 } = await supabase.auth.signOut();
+      if (error2) throw error2;
+      setUser(null);
+      console.log("✅ Signed out successfully");
+    } catch (err) {
+      console.error("❌ Sign out error:", err);
+      setError(err.message || "Failed to sign out");
+      throw err;
+    }
+  };
+  const refreshUser = async () => {
+    if (!user) return;
+    try {
+      console.log("Refreshing user data...");
+      const {
+        data: { user: authUser }
+      } = await supabase.auth.getUser();
+      if (authUser) {
+        await fetchUserProfile(authUser);
+      }
+    } catch (err) {
+      console.error("❌ Refresh user error:", err);
+      setError(err.message || "Failed to refresh user data");
+    }
+  };
+  return {
+    user,
+    loading,
+    error,
+    signOut,
+    refreshUser
+  };
+}
+const Homepage = UNSAFE_withComponentProps(function HomePage() {
+  const {
+    user,
+    loading
+  } = useAuth();
+  if (loading) {
+    return /* @__PURE__ */ jsx("div", {
+      className: "min-h-screen flex items-center justify-center",
+      children: /* @__PURE__ */ jsx(Loader2, {
+        className: "h-8 w-8 animate-spin text-blue-500"
+      })
+    });
+  }
+  return /* @__PURE__ */ jsxs("div", {
+    className: "min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800",
+    children: [/* @__PURE__ */ jsx(Header, {}), /* @__PURE__ */ jsx("div", {
+      className: "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8",
+      children: /* @__PURE__ */ jsx("div", {
+        className: "max-w-4xl mx-auto",
+        children: !user ? /* @__PURE__ */ jsxs("div", {
+          className: "mt-20 text-center",
+          children: [/* @__PURE__ */ jsx("h1", {
+            className: "text-2xl font-bold text-gray-900 dark:text-white mb-4",
+            children: "Please sign in to view posts"
+          }), /* @__PURE__ */ jsx("p", {
+            className: "text-gray-600 dark:text-gray-400",
+            children: "You need to be logged in to access the community feed."
+          })]
+        }) : /* @__PURE__ */ jsxs(Fragment, {
+          children: [/* @__PURE__ */ jsxs("div", {
+            className: "mb-8",
+            children: [/* @__PURE__ */ jsx("h1", {
+              className: "text-3xl font-bold text-gray-900 dark:text-white",
+              children: "Community Feed"
+            }), /* @__PURE__ */ jsx("p", {
+              className: "text-gray-600 dark:text-gray-400 mt-2",
+              children: "Stay updated with posts from your colleagues"
+            })]
+          }), /* @__PURE__ */ jsx(PostsFeed, {
+            currentUser: user
+          })]
+        })
+      })
+    })]
+  });
+});
+const route5 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+  __proto__: null,
+  default: Homepage
+}, Symbol.toStringTag, { value: "Module" }));
+function Tabs({
+  className,
+  ...props
+}) {
+  return /* @__PURE__ */ jsx(
+    TabsPrimitive.Root,
+    {
+      "data-slot": "tabs",
+      className: cn("flex flex-col gap-2", className),
+      ...props
+    }
+  );
+}
+function TabsList({
+  className,
+  ...props
+}) {
+  return /* @__PURE__ */ jsx(
+    TabsPrimitive.List,
+    {
+      "data-slot": "tabs-list",
+      className: cn(
+        "bg-muted text-muted-foreground inline-flex h-9 w-fit items-center justify-center rounded-lg p-[3px]",
+        className
+      ),
+      ...props
+    }
+  );
+}
+function TabsTrigger({
+  className,
+  ...props
+}) {
+  return /* @__PURE__ */ jsx(
+    TabsPrimitive.Trigger,
+    {
+      "data-slot": "tabs-trigger",
+      className: cn(
+        "data-[state=active]:bg-background dark:data-[state=active]:text-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:outline-ring dark:data-[state=active]:border-input dark:data-[state=active]:bg-input/30 text-foreground dark:text-muted-foreground inline-flex h-[calc(100%-1px)] flex-1 items-center justify-center gap-1.5 rounded-md border border-transparent px-2 py-1 text-sm font-medium whitespace-nowrap transition-[color,box-shadow] focus-visible:ring-[3px] focus-visible:outline-1 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:shadow-sm [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        className
+      ),
+      ...props
+    }
+  );
+}
+function TabsContent({
+  className,
+  ...props
+}) {
+  return /* @__PURE__ */ jsx(
+    TabsPrimitive.Content,
+    {
+      "data-slot": "tabs-content",
+      className: cn("flex-1 outline-none", className),
+      ...props
+    }
+  );
+}
+function Dialog({
+  ...props
+}) {
+  return /* @__PURE__ */ jsx(DialogPrimitive.Root, { "data-slot": "dialog", ...props });
+}
+function DialogPortal({
+  ...props
+}) {
+  return /* @__PURE__ */ jsx(DialogPrimitive.Portal, { "data-slot": "dialog-portal", ...props });
+}
+function DialogOverlay({
+  className,
+  ...props
+}) {
+  return /* @__PURE__ */ jsx(
+    DialogPrimitive.Overlay,
+    {
+      "data-slot": "dialog-overlay",
+      className: cn(
+        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/50",
+        className
+      ),
+      ...props
+    }
+  );
+}
+function DialogContent({
+  className,
+  children,
+  showCloseButton = true,
+  ...props
+}) {
+  return /* @__PURE__ */ jsxs(DialogPortal, { "data-slot": "dialog-portal", children: [
+    /* @__PURE__ */ jsx(DialogOverlay, {}),
+    /* @__PURE__ */ jsxs(
+      DialogPrimitive.Content,
+      {
+        "data-slot": "dialog-content",
+        className: cn(
+          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200 outline-none sm:max-w-lg",
+          className
+        ),
+        ...props,
+        children: [
+          children,
+          showCloseButton && /* @__PURE__ */ jsxs(
+            DialogPrimitive.Close,
+            {
+              "data-slot": "dialog-close",
+              className: "ring-offset-background focus:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+              children: [
+                /* @__PURE__ */ jsx(XIcon, {}),
+                /* @__PURE__ */ jsx("span", { className: "sr-only", children: "Close" })
+              ]
+            }
+          )
+        ]
+      }
+    )
+  ] });
+}
+function DialogHeader({ className, ...props }) {
+  return /* @__PURE__ */ jsx(
+    "div",
+    {
+      "data-slot": "dialog-header",
+      className: cn("flex flex-col gap-2 text-center sm:text-left", className),
+      ...props
+    }
+  );
+}
+function DialogFooter({ className, ...props }) {
+  return /* @__PURE__ */ jsx(
+    "div",
+    {
+      "data-slot": "dialog-footer",
+      className: cn(
+        "flex flex-col-reverse gap-2 sm:flex-row sm:justify-end",
+        className
+      ),
+      ...props
+    }
+  );
+}
+function DialogTitle({
+  className,
+  ...props
+}) {
+  return /* @__PURE__ */ jsx(
+    DialogPrimitive.Title,
+    {
+      "data-slot": "dialog-title",
+      className: cn("text-lg leading-none font-semibold", className),
+      ...props
+    }
+  );
+}
+function DialogDescription({
+  className,
+  ...props
+}) {
+  return /* @__PURE__ */ jsx(
+    DialogPrimitive.Description,
+    {
+      "data-slot": "dialog-description",
+      className: cn("text-muted-foreground text-sm", className),
+      ...props
+    }
+  );
+}
+function Skeleton({ className, ...props }) {
+  return /* @__PURE__ */ jsx(
+    "div",
+    {
+      "data-slot": "skeleton",
+      className: cn("bg-accent animate-pulse rounded-md", className),
+      ...props
+    }
+  );
 }
 function UserInfoCard({
   user,
@@ -3798,6 +4388,52 @@ function UserInfoCard({
     ] })
   ] });
 }
+class CacheBustManager {
+  static instance;
+  version = Date.now();
+  subscribers = [];
+  constructor() {
+  }
+  static getInstance() {
+    if (!CacheBustManager.instance) {
+      CacheBustManager.instance = new CacheBustManager();
+    }
+    return CacheBustManager.instance;
+  }
+  getVersion() {
+    return this.version;
+  }
+  bust() {
+    this.version = Date.now();
+    this.notifySubscribers();
+  }
+  subscribe(callback2) {
+    this.subscribers.push(callback2);
+    return () => {
+      this.subscribers = this.subscribers.filter((cb) => cb !== callback2);
+    };
+  }
+  notifySubscribers() {
+    this.subscribers.forEach((callback2) => callback2());
+  }
+  // Helper to add cache busting to any URL
+  bustUrl(url) {
+    if (!url) return url;
+    try {
+      const urlObj = new URL(url);
+      urlObj.searchParams.set("_cb", this.version.toString());
+      return urlObj.toString();
+    } catch {
+      return url;
+    }
+  }
+  // Helper to bust all Supabase storage URLs
+  bustSupabaseUrl(url) {
+    if (!url || !url.includes("supabase.co")) return url;
+    return this.bustUrl(url);
+  }
+}
+const cacheBust = CacheBustManager.getInstance();
 function useGlobalCacheBust() {
   const [version, setVersion] = useState(cacheBust.getVersion());
   useEffect(() => {
@@ -4104,7 +4740,6 @@ const profile = UNSAFE_withComponentProps(function Profile() {
   const [viewedUser, setViewedUser] = useState(null);
   const [currentUserId, setCurrentUserId] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [posts, setPosts] = useState([]);
   const [friends, setFriends] = useState([]);
   const [activeTab, setActiveTab] = useState("posts");
   const [isEditing, setIsEditing] = useState(false);
@@ -4127,6 +4762,17 @@ const profile = UNSAFE_withComponentProps(function Profile() {
     phone: "",
     hire_date: ""
   });
+  const {
+    posts,
+    loading: postsLoading,
+    createPost,
+    deletePost,
+    likePost,
+    unlikePost,
+    bookmarkPost,
+    unbookmarkPost,
+    addComment
+  } = usePosts(viewedUser?.id);
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: "",
     newPassword: "",
@@ -4615,73 +5261,57 @@ const profile = UNSAFE_withComponentProps(function Profile() {
   };
   const handleCreatePost = async (content, image) => {
     try {
-      const newPostObj = {
-        id: Date.now().toString(),
-        content,
-        image_url: image ? URL.createObjectURL(image) : null,
-        created_at: (/* @__PURE__ */ new Date()).toISOString(),
-        likes_count: 0,
-        comments_count: 0,
-        user: {
-          id: viewedUser?.id || "",
-          full_name: viewedUser?.full_name || "",
-          avatar_url: viewedUser?.avatar_url || null
-        },
-        liked: false,
-        bookmarked: false
-      };
-      setPosts([newPostObj, ...posts]);
-      toast.success("Your post has been published");
+      const result = await createPost(content, image);
+      if (result) {
+        toast.success("Your post has been published");
+      }
     } catch (error) {
       console.error("Error creating post:", error);
       toast.error("Failed to create post");
-      throw error;
     }
   };
-  const handleLikePost = (postId) => {
-    setPosts(posts.map((post2) => {
-      if (post2.id === postId) {
-        const wasLiked = post2.liked;
-        return {
-          ...post2,
-          liked: !wasLiked,
-          likes_count: wasLiked ? post2.likes_count - 1 : post2.likes_count + 1
-        };
-      }
-      return post2;
-    }));
+  const handleLikePost = async (postId) => {
     const post = posts.find((p) => p.id === postId);
     if (post) {
-      if (!post.liked) {
-        toast.success("Post liked!");
-      } else {
-        toast.info("Post unliked");
+      const isLiked = post.likes?.[0]?.count > 0;
+      try {
+        if (isLiked) {
+          await unlikePost(postId);
+          toast.info("Post unliked");
+        } else {
+          await likePost(postId);
+          toast.success("Post liked!");
+        }
+      } catch (error) {
+        toast.error(error.message || "Failed to like post");
       }
     }
   };
-  const handleBookmarkPost = (postId) => {
-    setPosts(posts.map((post2) => {
-      if (post2.id === postId) {
-        const wasBookmarked = post2.bookmarked;
-        return {
-          ...post2,
-          bookmarked: !wasBookmarked
-        };
-      }
-      return post2;
-    }));
+  const handleBookmarkPost = async (postId) => {
     const post = posts.find((p) => p.id === postId);
     if (post) {
-      if (!post.bookmarked) {
-        toast.success("Post bookmarked!");
-      } else {
-        toast.info("Post removed from bookmarks");
+      const isBookmarked = post.bookmarks?.[0]?.count > 0;
+      try {
+        if (isBookmarked) {
+          await unbookmarkPost(postId);
+          toast.info("Post removed from bookmarks");
+        } else {
+          await bookmarkPost(postId);
+          toast.success("Post bookmarked!");
+        }
+      } catch (error) {
+        toast.error(error.message || "Failed to bookmark post");
       }
     }
   };
-  const handleDeletePost = (postId) => {
-    setPosts(posts.filter((p) => p.id !== postId));
-    toast.success("Post deleted successfully");
+  const handleDeletePost = async (postId) => {
+    try {
+      await deletePost(postId);
+      toast.success("Post deleted successfully");
+    } catch (error) {
+      console.error("Error deleting post:", error);
+      toast.error(error.message || "Failed to delete post");
+    }
   };
   if (loading) {
     return /* @__PURE__ */ jsx("div", {
@@ -5040,14 +5670,152 @@ const profile = UNSAFE_withComponentProps(function Profile() {
               }), /* @__PURE__ */ jsx(TabsContent, {
                 value: "posts",
                 className: "space-y-6 mt-6",
-                children: posts.map((post) => /* @__PURE__ */ jsx(Post, {
-                  ...post,
-                  isOwnPost: post.user.id === viewedUser?.id,
-                  onLike: handleLikePost,
-                  onBookmark: handleBookmarkPost,
-                  onComment: () => toast.info("Comment feature coming soon!"),
-                  onShare: () => toast.success("Post shared!"),
-                  onDelete: handleDeletePost
+                children: postsLoading && posts.length === 0 ? /* @__PURE__ */ jsx("div", {
+                  className: "flex justify-center py-8",
+                  children: /* @__PURE__ */ jsx(Loader2, {
+                    className: "h-8 w-8 animate-spin text-blue-500"
+                  })
+                }) : posts.length === 0 ? /* @__PURE__ */ jsxs("div", {
+                  className: "text-center py-12",
+                  children: [/* @__PURE__ */ jsx("div", {
+                    className: "h-16 w-16 mx-auto rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-4",
+                    children: /* @__PURE__ */ jsx("svg", {
+                      className: "h-8 w-8 text-gray-400",
+                      fill: "none",
+                      stroke: "currentColor",
+                      viewBox: "0 0 24 24",
+                      children: /* @__PURE__ */ jsx("path", {
+                        strokeLinecap: "round",
+                        strokeLinejoin: "round",
+                        strokeWidth: 2,
+                        d: "M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                      })
+                    })
+                  }), /* @__PURE__ */ jsx("h3", {
+                    className: "text-lg font-semibold text-gray-900 dark:text-white mb-2",
+                    children: "No posts yet"
+                  }), /* @__PURE__ */ jsx("p", {
+                    className: "text-gray-500 dark:text-gray-400",
+                    children: isOwnProfile ? "Share your first post to start the conversation" : "This user hasn't posted anything yet"
+                  })]
+                }) : posts.map((post) => /* @__PURE__ */ jsxs("div", {
+                  className: "bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-6",
+                  children: [/* @__PURE__ */ jsxs("div", {
+                    className: "flex items-start justify-between mb-4",
+                    children: [/* @__PURE__ */ jsxs("div", {
+                      className: "flex items-center gap-3",
+                      children: [/* @__PURE__ */ jsxs(Avatar, {
+                        className: "h-10 w-10",
+                        children: [/* @__PURE__ */ jsx(AvatarImage, {
+                          src: post.user.avatar_url || void 0
+                        }), /* @__PURE__ */ jsxs(AvatarFallback, {
+                          className: "bg-gradient-to-br from-blue-500 to-indigo-600 text-white",
+                          children: [post.user.first_name?.[0], post.user.last_name?.[0]]
+                        })]
+                      }), /* @__PURE__ */ jsxs("div", {
+                        children: [/* @__PURE__ */ jsx("h3", {
+                          className: "font-semibold text-gray-900 dark:text-white",
+                          children: post.user.full_name
+                        }), /* @__PURE__ */ jsx("p", {
+                          className: "text-sm text-gray-500 dark:text-gray-400",
+                          children: new Date(post.created_at).toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit"
+                          })
+                        })]
+                      })]
+                    }), isOwnProfile && /* @__PURE__ */ jsx(Button, {
+                      variant: "ghost",
+                      size: "sm",
+                      onClick: () => handleDeletePost(post.id),
+                      className: "text-gray-500 hover:text-red-500",
+                      title: "Delete post",
+                      children: /* @__PURE__ */ jsx(Trash2, {
+                        className: "h-4 w-4"
+                      })
+                    })]
+                  }), /* @__PURE__ */ jsx("div", {
+                    className: "mb-4",
+                    children: /* @__PURE__ */ jsx("p", {
+                      className: "text-gray-800 dark:text-gray-200 whitespace-pre-wrap",
+                      children: post.content
+                    })
+                  }), post.image_url && /* @__PURE__ */ jsx("div", {
+                    className: "mb-4 rounded-lg overflow-hidden",
+                    children: /* @__PURE__ */ jsx("img", {
+                      src: post.image_url,
+                      alt: "Post",
+                      className: "w-full max-h-[500px] object-cover cursor-pointer hover:opacity-95 transition-opacity",
+                      onClick: () => window.open(post.image_url, "_blank"),
+                      loading: "lazy"
+                    })
+                  }), /* @__PURE__ */ jsx("div", {
+                    className: "flex items-center justify-between text-sm text-gray-500 dark:text-gray-400 mb-4",
+                    children: /* @__PURE__ */ jsxs("div", {
+                      className: "flex items-center gap-6",
+                      children: [/* @__PURE__ */ jsxs("button", {
+                        onClick: () => handleLikePost(post.id),
+                        className: "flex items-center gap-1 hover:text-blue-600 dark:hover:text-blue-400 transition-colors",
+                        children: [/* @__PURE__ */ jsx(Heart, {
+                          className: `h-4 w-4 ${post.likes?.[0]?.count > 0 ? "fill-red-500 text-red-500" : ""}`
+                        }), post.likes?.[0]?.count || 0, " likes"]
+                      }), /* @__PURE__ */ jsxs("button", {
+                        onClick: () => {
+                          const content = prompt("Enter your comment:");
+                          if (content && content.trim()) {
+                            addComment(post.id, content);
+                          }
+                        },
+                        className: "flex items-center gap-1 hover:text-blue-600 dark:hover:text-blue-400 transition-colors",
+                        children: [/* @__PURE__ */ jsx(MessageCircle, {
+                          className: "h-4 w-4"
+                        }), post.comments?.[0]?.count || 0, " comments"]
+                      })]
+                    })
+                  }), /* @__PURE__ */ jsxs("div", {
+                    className: "flex items-center gap-2 pt-4 border-t border-gray-200 dark:border-gray-700",
+                    children: [/* @__PURE__ */ jsxs(Button, {
+                      variant: "ghost",
+                      size: "sm",
+                      className: "flex-1 gap-2",
+                      onClick: () => handleLikePost(post.id),
+                      children: [/* @__PURE__ */ jsx(Heart, {
+                        className: `h-5 w-5 ${post.likes?.[0]?.count > 0 ? "fill-red-500 text-red-500" : ""}`
+                      }), post.likes?.[0]?.count > 0 ? "Liked" : "Like"]
+                    }), /* @__PURE__ */ jsxs(Button, {
+                      variant: "ghost",
+                      size: "sm",
+                      className: "flex-1 gap-2",
+                      onClick: () => {
+                        const content = prompt("Enter your comment:");
+                        if (content && content.trim()) {
+                          addComment(post.id, content);
+                        }
+                      },
+                      children: [/* @__PURE__ */ jsx(MessageCircle, {
+                        className: "h-5 w-5"
+                      }), "Comment"]
+                    }), /* @__PURE__ */ jsxs(Button, {
+                      variant: "ghost",
+                      size: "sm",
+                      className: "flex-1 gap-2",
+                      onClick: () => handleBookmarkPost(post.id),
+                      children: [/* @__PURE__ */ jsx("svg", {
+                        className: `h-5 w-5 ${post.bookmarks?.[0]?.count > 0 ? "fill-yellow-500 text-yellow-500" : ""}`,
+                        fill: "none",
+                        stroke: "currentColor",
+                        viewBox: "0 0 24 24",
+                        children: /* @__PURE__ */ jsx("path", {
+                          strokeLinecap: "round",
+                          strokeLinejoin: "round",
+                          strokeWidth: 2,
+                          d: "M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"
+                        })
+                      }), post.bookmarks?.[0]?.count > 0 ? "Saved" : "Save"]
+                    })]
+                  })]
                 }, post.id))
               }), /* @__PURE__ */ jsx(TabsContent, {
                 value: "photos",
@@ -5720,11 +6488,11 @@ const profile = UNSAFE_withComponentProps(function Profile() {
     })
   });
 });
-const route5 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+const route6 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
   default: profile
 }, Symbol.toStringTag, { value: "Module" }));
-const serverManifest = { "entry": { "module": "/assets/entry.client-DCpKj6do.js", "imports": ["/assets/chunk-EPOLDU6W-BHelFxtI.js", "/assets/index-BRs_dBEV.js"], "css": [] }, "routes": { "root": { "id": "root", "parentId": void 0, "path": "", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasErrorBoundary": true, "module": "/assets/root-C5uW3vdT.js", "imports": ["/assets/chunk-EPOLDU6W-BHelFxtI.js", "/assets/index-BRs_dBEV.js", "/assets/ThemeProvider-1bH72AO7.js", "/assets/supabase-BO81Wobz.js"], "css": ["/assets/root-D5ftVr6z.css"], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/login": { "id": "routes/login", "parentId": "root", "path": void 0, "index": true, "caseSensitive": void 0, "hasAction": false, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasErrorBoundary": false, "module": "/assets/login-BlI_JUj0.js", "imports": ["/assets/chunk-EPOLDU6W-BHelFxtI.js", "/assets/card-DCCwVGqU.js", "/assets/AuthChecker-lr5Qdb8c.js", "/assets/AuthLayout-_UhsZK27.js", "/assets/alert-9_S9W-Db.js", "/assets/supabase-BO81Wobz.js", "/assets/mail-BwQk4DBE.js", "/assets/lock-RqldTzhB.js", "/assets/loader-circle-B5kmy_fB.js", "/assets/index-BRs_dBEV.js", "/assets/ThemeProvider-1bH72AO7.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/register": { "id": "routes/register", "parentId": "root", "path": "register", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasErrorBoundary": false, "module": "/assets/register-CZV6nYwK.js", "imports": ["/assets/chunk-EPOLDU6W-BHelFxtI.js", "/assets/card-DCCwVGqU.js", "/assets/AuthChecker-lr5Qdb8c.js", "/assets/AuthLayout-_UhsZK27.js", "/assets/alert-9_S9W-Db.js", "/assets/index-BMxA-PKL.js", "/assets/index-BRs_dBEV.js", "/assets/loader-circle-B5kmy_fB.js", "/assets/supabase-BO81Wobz.js", "/assets/triangle-alert-CiF5QaMf.js", "/assets/ThemeProvider-1bH72AO7.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/auth/callback": { "id": "routes/auth/callback", "parentId": "root", "path": "auth/callback", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasErrorBoundary": false, "module": "/assets/callback-D9M2kDCW.js", "imports": ["/assets/chunk-EPOLDU6W-BHelFxtI.js", "/assets/supabase-BO81Wobz.js", "/assets/card-DCCwVGqU.js", "/assets/alert-9_S9W-Db.js", "/assets/badge-z8JLICnP.js", "/assets/loader-circle-B5kmy_fB.js", "/assets/triangle-alert-CiF5QaMf.js", "/assets/mail-BwQk4DBE.js", "/assets/index-BRs_dBEV.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/auth/GoogleAuth": { "id": "routes/auth/GoogleAuth", "parentId": "root", "path": "auth/google", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasErrorBoundary": false, "module": "/assets/GoogleAuth-Bi6BMt8T.js", "imports": ["/assets/chunk-EPOLDU6W-BHelFxtI.js", "/assets/supabase-BO81Wobz.js", "/assets/alert-9_S9W-Db.js", "/assets/loader-circle-B5kmy_fB.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/profile": { "id": "routes/profile", "parentId": "root", "path": "profile/:userId", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasErrorBoundary": false, "module": "/assets/profile-DMv3k22F.js", "imports": ["/assets/chunk-EPOLDU6W-BHelFxtI.js", "/assets/supabase-BO81Wobz.js", "/assets/AuthChecker-lr5Qdb8c.js", "/assets/card-DCCwVGqU.js", "/assets/badge-z8JLICnP.js", "/assets/index-BMxA-PKL.js", "/assets/loader-circle-B5kmy_fB.js", "/assets/index-BRs_dBEV.js", "/assets/mail-BwQk4DBE.js", "/assets/lock-RqldTzhB.js", "/assets/ThemeProvider-1bH72AO7.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 } }, "url": "/assets/manifest-461f3ce3.js", "version": "461f3ce3", "sri": void 0 };
+const serverManifest = { "entry": { "module": "/assets/entry.client-DCpKj6do.js", "imports": ["/assets/chunk-EPOLDU6W-BHelFxtI.js", "/assets/index-BRs_dBEV.js"], "css": [] }, "routes": { "root": { "id": "root", "parentId": void 0, "path": "", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasErrorBoundary": true, "module": "/assets/root-CoPgx0vk.js", "imports": ["/assets/chunk-EPOLDU6W-BHelFxtI.js", "/assets/index-BRs_dBEV.js", "/assets/ThemeProvider-1bH72AO7.js", "/assets/supabase-ABfmbsGw.js"], "css": ["/assets/root-sZHs2jML.css"], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/login": { "id": "routes/login", "parentId": "root", "path": void 0, "index": true, "caseSensitive": void 0, "hasAction": false, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasErrorBoundary": false, "module": "/assets/login-Dzk__EDw.js", "imports": ["/assets/chunk-EPOLDU6W-BHelFxtI.js", "/assets/card-DCCwVGqU.js", "/assets/index-C0vNNbe7.js", "/assets/AuthChecker-BBhK0CVT.js", "/assets/AuthLayout-55-QBFHy.js", "/assets/alert-9_S9W-Db.js", "/assets/supabase-ABfmbsGw.js", "/assets/mail-BwQk4DBE.js", "/assets/lock-RqldTzhB.js", "/assets/loader-circle-B5kmy_fB.js", "/assets/index-BRs_dBEV.js", "/assets/ThemeProvider-1bH72AO7.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/register": { "id": "routes/register", "parentId": "root", "path": "register", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasErrorBoundary": false, "module": "/assets/register-hRM_Xkd3.js", "imports": ["/assets/chunk-EPOLDU6W-BHelFxtI.js", "/assets/card-DCCwVGqU.js", "/assets/index-C0vNNbe7.js", "/assets/AuthChecker-BBhK0CVT.js", "/assets/AuthLayout-55-QBFHy.js", "/assets/alert-9_S9W-Db.js", "/assets/index-DQ1tQClc.js", "/assets/index-BRs_dBEV.js", "/assets/loader-circle-B5kmy_fB.js", "/assets/supabase-ABfmbsGw.js", "/assets/triangle-alert-CiF5QaMf.js", "/assets/ThemeProvider-1bH72AO7.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/auth/callback": { "id": "routes/auth/callback", "parentId": "root", "path": "auth/callback", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasErrorBoundary": false, "module": "/assets/callback-CLhD2bef.js", "imports": ["/assets/chunk-EPOLDU6W-BHelFxtI.js", "/assets/supabase-ABfmbsGw.js", "/assets/card-DCCwVGqU.js", "/assets/alert-9_S9W-Db.js", "/assets/separator-Bmx-RGAP.js", "/assets/loader-circle-B5kmy_fB.js", "/assets/badge-CCoSctF9.js", "/assets/triangle-alert-CiF5QaMf.js", "/assets/mail-BwQk4DBE.js", "/assets/index-BRs_dBEV.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/auth/GoogleAuth": { "id": "routes/auth/GoogleAuth", "parentId": "root", "path": "auth/google", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasErrorBoundary": false, "module": "/assets/GoogleAuth-s_0wk5Xm.js", "imports": ["/assets/chunk-EPOLDU6W-BHelFxtI.js", "/assets/supabase-ABfmbsGw.js", "/assets/alert-9_S9W-Db.js", "/assets/loader-circle-B5kmy_fB.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/pages/Homepage": { "id": "routes/pages/Homepage", "parentId": "root", "path": "feed", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasErrorBoundary": false, "module": "/assets/Homepage-HU25H-wD.js", "imports": ["/assets/chunk-EPOLDU6W-BHelFxtI.js", "/assets/usePosts-v-_rWZCA.js", "/assets/card-DCCwVGqU.js", "/assets/index-C0vNNbe7.js", "/assets/loader-circle-B5kmy_fB.js", "/assets/supabase-ABfmbsGw.js", "/assets/index-BRs_dBEV.js", "/assets/index-DQ1tQClc.js", "/assets/separator-Bmx-RGAP.js", "/assets/ThemeProvider-1bH72AO7.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/profile": { "id": "routes/profile", "parentId": "root", "path": "profile/:userId", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasErrorBoundary": false, "module": "/assets/profile-CQ7dYom_.js", "imports": ["/assets/chunk-EPOLDU6W-BHelFxtI.js", "/assets/supabase-ABfmbsGw.js", "/assets/index-C0vNNbe7.js", "/assets/card-DCCwVGqU.js", "/assets/usePosts-v-_rWZCA.js", "/assets/separator-Bmx-RGAP.js", "/assets/index-BRs_dBEV.js", "/assets/index-DQ1tQClc.js", "/assets/loader-circle-B5kmy_fB.js", "/assets/badge-CCoSctF9.js", "/assets/AuthChecker-BBhK0CVT.js", "/assets/mail-BwQk4DBE.js", "/assets/lock-RqldTzhB.js", "/assets/ThemeProvider-1bH72AO7.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 } }, "url": "/assets/manifest-8bb776b8.js", "version": "8bb776b8", "sri": void 0 };
 const assetsBuildDirectory = "build\\client";
 const basename = "/";
 const future = { "unstable_optimizeDeps": false, "unstable_subResourceIntegrity": false, "unstable_trailingSlashAwareDataRequests": false, "v8_middleware": false, "v8_splitRouteModules": false, "v8_viteEnvironmentApi": false };
@@ -5775,13 +6543,21 @@ const routes = {
     caseSensitive: void 0,
     module: route4
   },
+  "routes/pages/Homepage": {
+    id: "routes/pages/Homepage",
+    parentId: "root",
+    path: "feed",
+    index: void 0,
+    caseSensitive: void 0,
+    module: route5
+  },
   "routes/profile": {
     id: "routes/profile",
     parentId: "root",
     path: "profile/:userId",
     index: void 0,
     caseSensitive: void 0,
-    module: route5
+    module: route6
   }
 };
 const allowedActionOrigins = false;
