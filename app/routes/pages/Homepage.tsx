@@ -36,8 +36,8 @@ export default function HomePage() {
     posts,
     loading: postsLoading,
     createPost,
-    likePost,
-    bookmarkPost,
+    toggleLike, // Changed from likePost to toggleLike
+    toggleBookmark, // Changed from bookmarkPost to toggleBookmark
     deletePost,
     addComment,
   } = usePosts(); // No userId means get all posts
@@ -181,7 +181,7 @@ export default function HomePage() {
    */
   const handleLikePost = async (postId: string) => {
     try {
-      await likePost(postId);
+      await toggleLike(postId); // Changed from likePost to toggleLike
     } catch (error: any) {
       toast.error("Failed to like post");
     }
@@ -192,7 +192,7 @@ export default function HomePage() {
    */
   const handleBookmarkPost = async (postId: string) => {
     try {
-      await bookmarkPost(postId);
+      await toggleBookmark(postId); // Changed from bookmarkPost to toggleBookmark
     } catch (error: any) {
       toast.error("Failed to bookmark post");
     }
@@ -391,6 +391,7 @@ export default function HomePage() {
                           id: post.user.id,
                           full_name: post.user.full_name,
                           avatar_url: post.user.avatar_url,
+                          position: post.user.position || "Employee", // Added position
                         },
                       }))}
                       loading={postsLoading}

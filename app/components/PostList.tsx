@@ -95,7 +95,7 @@ function PostSkeletonLoader({ count = 3 }: { count?: number }) {
 
           <CardFooter className="pt-0 flex flex-col">
             {/* Stats Skeleton */}
-            <div className="flex items-center justify-between text-sm mb-4">
+            <div className="flex justify-between text-sm mb-4">
               <div className="flex items-center space-x-4">
                 <Skeleton className="h-4 w-20 bg-gray-200 dark:bg-gray-700" />
                 <Skeleton className="h-4 w-24 bg-gray-200 dark:bg-gray-700" />
@@ -105,8 +105,8 @@ function PostSkeletonLoader({ count = 3 }: { count?: number }) {
             {/* Action Buttons Skeleton */}
             <div className="flex items-center border-t border-b border-gray-100 dark:border-gray-800 py-2">
               {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="flex-1 flex justify-center">
-                  <Skeleton className="h-8 w-16 bg-gray-200 dark:bg-gray-700" />
+                <div key={i} className="flex-1">
+                  <Skeleton className="h-8 w-full bg-gray-200 dark:bg-gray-700" />
                 </div>
               ))}
             </div>
@@ -282,12 +282,12 @@ export function PostList({
                 </div>
               </div>
 
-              {/* Action Buttons */}
+              {/* Action Buttons - Changed from justify-center to justify-between */}
               <div className="flex items-center border-t border-b border-gray-100 dark:border-gray-800 py-2">
                 <Button
                   variant="ghost"
                   size="sm"
-                  className={`flex-1 ${post.is_liked ? "text-red-500" : ""}`}
+                  className={`flex-1 justify-start ${post.is_liked ? "text-red-500" : ""}`}
                   onClick={() => onLike(post.id)}
                 >
                   <Heart
@@ -299,7 +299,7 @@ export function PostList({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="flex-1"
+                  className="flex-1 justify-start"
                   onClick={() => {
                     const textarea = document.getElementById(
                       `comment-${post.id}`
@@ -316,7 +316,7 @@ export function PostList({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="flex-1"
+                  className="flex-1 justify-start"
                   onClick={() => toast.info("Share feature coming soon")}
                 >
                   <Share2 className="h-5 w-5 mr-2" />
@@ -326,7 +326,7 @@ export function PostList({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className={`flex-1 ${post.is_bookmarked ? "text-blue-500" : ""}`}
+                  className={`flex-1 justify-start ${post.is_bookmarked ? "text-blue-500" : ""}`}
                   onClick={() => onBookmark(post.id)}
                 >
                   <Bookmark

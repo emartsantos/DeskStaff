@@ -11,6 +11,7 @@ type UserType = {
   avatar_url: string | null;
   email: string;
   created_at: string;
+  position?: string; // Added position
 };
 
 type PostType = {
@@ -53,13 +54,13 @@ export function usePosts(userId?: string) {
       setLoading(true);
       console.log("Fetching posts...");
 
-      // First, fetch posts with user info
+      // First, fetch posts with user info - including position
       let postsQuery = supabase
         .from("posts")
         .select(
           `
           *,
-          user:users(id, first_name, last_name, full_name, avatar_url, email, created_at)
+          user:users(id, first_name, last_name, full_name, avatar_url, email, created_at, position)
         `
         )
         .order("created_at", { ascending: false });
@@ -189,7 +190,7 @@ export function usePosts(userId?: string) {
               .select(
                 `
                 *,
-                user:users(id, first_name, last_name, full_name, avatar_url, email, created_at)
+                user:users(id, first_name, last_name, full_name, avatar_url, email, created_at, position)
               `
               )
               .eq("id", newPost.id)
@@ -400,6 +401,7 @@ export function usePosts(userId?: string) {
           avatar_url: currentUser?.avatar_url || null,
           email: currentUser?.email || authUser.email || "",
           created_at: currentUser?.created_at || new Date().toISOString(),
+          position: currentUser?.position || "Employee",
         },
       };
 
@@ -446,7 +448,7 @@ export function usePosts(userId?: string) {
         .select(
           `
           *,
-          user:users(id, first_name, last_name, full_name, avatar_url, email, created_at)
+          user:users(id, first_name, last_name, full_name, avatar_url, email, created_at, position)
         `
         )
         .single();
@@ -500,7 +502,7 @@ export function usePosts(userId?: string) {
   };
 
   /**
-   * Like a post with optimistic update
+   * Like a post with optimistic update - UPDATED
    */
   const likePost = async (postId: string) => {
     try {
@@ -532,13 +534,21 @@ export function usePosts(userId?: string) {
         })
       );
 
-      // Insert like in database
-      const { error } = await supabase.from("post_likes").insert({
-        post_id: postId,
-        user_id: user.id,
-      });
+      // Start a transaction by doing both operations
+      const [likeResult, updateResult] = await Promise.all([
+        // Insert like in post_likes table
+        supabase.from("post_likes").insert({
+          post_id: postId,
+          user_id: user.id,
+        }),
+        // Update likes_count in posts table
+        supabase
+          .from("posts")
+          .update({ likes_count: post.likes_count + 1 })
+          .eq("id", postId),
+      ]);
 
-      if (error) {
+      if (likeResult.error || updateResult.error) {
         // Rollback optimistic update
         setPosts((prev) =>
           prev.map((post) => {
@@ -552,7 +562,7 @@ export function usePosts(userId?: string) {
             return post;
           })
         );
-        throw error;
+        throw likeResult.error || updateResult.error;
       }
     } catch (error: any) {
       console.error("Failed to like post:", error.message);
@@ -562,7 +572,7 @@ export function usePosts(userId?: string) {
   };
 
   /**
-   * Unlike a post with optimistic update
+   * Unlike a post with optimistic update - UPDATED
    */
   const unlikePost = async (postId: string) => {
     try {
@@ -570,6 +580,9 @@ export function usePosts(userId?: string) {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
+
+      const post = posts.find((p) => p.id === postId);
+      if (!post) throw new Error("Post not found");
 
       // Optimistic update
       setPosts((prev) =>
@@ -585,13 +598,24 @@ export function usePosts(userId?: string) {
         })
       );
 
-      const { error } = await supabase
-        .from("post_likes")
-        .delete()
-        .eq("post_id", postId)
-        .eq("user_id", user.id);
+      // Start a transaction by doing both operations
+      const [unlikeResult, updateResult] = await Promise.all([
+        // Remove like from post_likes table
+        supabase
+          .from("post_likes")
+          .delete()
+          .eq("post_id", postId)
+          .eq("user_id", user.id),
+        // Update likes_count in posts table
+        supabase
+          .from("posts")
+          .update({
+            likes_count: Math.max(0, post.likes_count - 1),
+          })
+          .eq("id", postId),
+      ]);
 
-      if (error) {
+      if (unlikeResult.error || updateResult.error) {
         // Rollback optimistic update
         setPosts((prev) =>
           prev.map((post) => {
@@ -605,7 +629,7 @@ export function usePosts(userId?: string) {
             return post;
           })
         );
-        throw error;
+        throw unlikeResult.error || updateResult.error;
       }
     } catch (error: any) {
       console.error("Failed to unlike post:", error.message);
@@ -713,7 +737,7 @@ export function usePosts(userId?: string) {
   };
 
   /**
-   * Add a comment to a post
+   * Add a comment to a post - UPDATED
    */
   const addComment = async (postId: string, content: string) => {
     try {
@@ -722,13 +746,27 @@ export function usePosts(userId?: string) {
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      const { error } = await supabase.from("post_comments").insert({
-        post_id: postId,
-        user_id: user.id,
-        content,
-      });
+      const post = posts.find((p) => p.id === postId);
+      if (!post) throw new Error("Post not found");
 
-      if (error) throw error;
+      // Start a transaction by doing both operations
+      const [commentResult, updateResult] = await Promise.all([
+        // Insert comment
+        supabase.from("post_comments").insert({
+          post_id: postId,
+          user_id: user.id,
+          content,
+        }),
+        // Update comments_count in posts table
+        supabase
+          .from("posts")
+          .update({ comments_count: post.comments_count + 1 })
+          .eq("id", postId),
+      ]);
+
+      if (commentResult.error || updateResult.error) {
+        throw commentResult.error || updateResult.error;
+      }
 
       toast.success("Comment added");
     } catch (error: any) {

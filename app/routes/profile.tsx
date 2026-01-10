@@ -111,8 +111,9 @@ export default function Profile() {
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
   const [isOwnProfile, setIsOwnProfile] = useState(false);
   const [isPrivacyOpen, setIsPrivacyOpen] = useState(false);
+  const [postsUserId, setPostsUserId] = useState<string | undefined>(undefined);
 
-  // Posts hook - using the user ID to fetch their posts
+  // Initialize posts hook with undefined to prevent fetching until we have the user ID
   const {
     posts,
     loading: postsLoading,
@@ -122,7 +123,7 @@ export default function Profile() {
     toggleBookmark,
     addComment,
     fetchPosts,
-  } = usePosts(viewedUser?.id); // Make sure viewedUser.id is passed here
+  } = usePosts(postsUserId); // Use state variable for user ID
 
   // ========== DATA FETCHING FUNCTIONS ==========
 
@@ -186,6 +187,7 @@ export default function Profile() {
   const fetchUserData = useCallback(async () => {
     try {
       setLoading(true);
+      setPostsUserId(undefined); // Reset posts user ID
 
       // Get current session
       const {
@@ -216,6 +218,7 @@ export default function Profile() {
         const viewedUserData = await fetchViewedUser(userIdToFetch);
         if (viewedUserData) {
           setViewedUser(viewedUserData);
+          setPostsUserId(userIdToFetch); // Set posts user ID AFTER we have the user data
         } else {
           // If user not found, redirect to own profile
           navigate(`/profile/${currentUserId}`, { replace: true });
@@ -224,6 +227,7 @@ export default function Profile() {
         // If viewing own profile, use logged-in user data
         if (loggedInUserData) {
           setViewedUser(loggedInUserData);
+          setPostsUserId(currentUserId); // Set posts user ID AFTER we have the user data
         }
       }
 
@@ -601,11 +605,12 @@ export default function Profile() {
               posts={posts}
               postsLoading={postsLoading}
               isOwnProfile={isOwnProfile}
-              currentUserId={currentUserId} // Add this line
+              currentUserId={currentUserId}
               onLikePost={handleLikePost}
               onBookmarkPost={handleBookmarkPost}
               onDeletePost={handleDeletePost}
               onAddComment={handleAddComment}
+              postsUserId={postsUserId} // Pass the postsUserId to ProfileTabs
             />
           </div>
         </div>
@@ -1002,7 +1007,8 @@ function ProfileTabs({
   posts,
   postsLoading,
   isOwnProfile,
-  currentUserId, // Add this prop
+  currentUserId,
+  postsUserId, // Add this prop
   onLikePost,
   onBookmarkPost,
   onDeletePost,
@@ -1013,12 +1019,16 @@ function ProfileTabs({
   posts: any[];
   postsLoading: boolean;
   isOwnProfile: boolean;
-  currentUserId: string | null; // Add this type
+  currentUserId: string | null;
+  postsUserId: string | undefined; // Add this type
   onLikePost: (postId: string) => void;
   onBookmarkPost: (postId: string) => void;
   onDeletePost: (postId: string) => void;
   onAddComment: (postId: string, content: string) => void;
 }) {
+  // Filter posts to only show posts from the specific user when viewing their profile
+  const filteredPosts = posts.filter((post) => post.user_id === postsUserId);
+
   return (
     <Tabs value={activeTab} onValueChange={onTabChange}>
       <TabsList className="grid w-full grid-cols-3 bg-gray-100/50 dark:bg-gray-800/50 p-1 rounded-xl">
@@ -1047,10 +1057,27 @@ function ProfileTabs({
 
       {/* Posts Tab */}
       <TabsContent value="posts" className="space-y-6 mt-6">
+        {/* Show message if no posts found for this user */}
+        {!postsLoading && filteredPosts.length === 0 && (
+          <div className="text-center py-12">
+            <div className="h-16 w-16 mx-auto rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-4">
+              <FileText className="h-8 w-8 text-gray-400" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+              No posts yet
+            </h3>
+            <p className="text-gray-500 dark:text-gray-400">
+              {isOwnProfile
+                ? "Share your first post to get started!"
+                : "This user hasn't posted anything yet"}
+            </p>
+          </div>
+        )}
+
         <PostList
-          posts={posts}
+          posts={filteredPosts} // Use filtered posts instead of all posts
           loading={postsLoading}
-          currentUserId={currentUserId} // Pass currentUserId here
+          currentUserId={currentUserId}
           onLike={onLikePost}
           onBookmark={onBookmarkPost}
           onDelete={isOwnProfile ? onDeletePost : undefined}
@@ -1060,7 +1087,9 @@ function ProfileTabs({
 
       {/* Photos Tab */}
       <TabsContent value="photos">
-        <PhotosTab posts={posts.filter((p) => p.image_url)} />
+        <PhotosTab
+          posts={posts.filter((p) => p.image_url && p.user_id === postsUserId)}
+        />
       </TabsContent>
 
       {/* Videos Tab */}
