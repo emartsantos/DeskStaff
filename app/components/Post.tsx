@@ -1,3 +1,4 @@
+// src/components/Post.tsx
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -21,6 +22,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
+import { useState } from "react";
+import { toast } from "sonner";
 
 interface PostUser {
   id: string;
@@ -39,8 +42,8 @@ export interface PostProps {
   liked: boolean;
   bookmarked: boolean;
   isOwnPost?: boolean;
-  onLike: (postId: string) => void;
-  onBookmark: (postId: string) => void;
+  onLike: (postId: string) => Promise<void>;
+  onBookmark: (postId: string) => Promise<void>;
   onComment?: (postId: string) => void;
   onShare?: (postId: string) => void;
   onEdit?: (postId: string) => void;
@@ -67,6 +70,14 @@ export function Post({
   onDelete,
   showActions = true,
 }: PostProps) {
+  const [isLiked, setIsLiked] = useState(liked);
+  const [isBookmarked, setIsBookmarked] = useState(bookmarked);
+  const [isLikeLoading, setIsLikeLoading] = useState(false);
+  const [isBookmarkLoading, setIsBookmarkLoading] = useState(false);
+
+  /**
+   * Format date for display
+   */
   const formattedDate = new Date(created_at).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
@@ -74,18 +85,100 @@ export function Post({
     minute: "2-digit",
   });
 
+  /**
+   * Handle like button click
+   */
+  const handleLike = async () => {
+    if (isLikeLoading) return;
+
+    setIsLikeLoading(true);
+    try {
+      await onLike(id);
+    } catch (error: any) {
+      console.error("Error liking post:", error);
+      toast.error("Failed to update like");
+    } finally {
+      setIsLikeLoading(false);
+    }
+  };
+
+  /**
+   * Handle bookmark button click
+   */
+  const handleBookmark = async () => {
+    if (isBookmarkLoading) return;
+
+    setIsBookmarkLoading(true);
+    try {
+      await onBookmark(id);
+    } catch (error: any) {
+      console.error("Error bookmarking post:", error);
+      toast.error("Failed to update bookmark");
+    } finally {
+      setIsBookmarkLoading(false);
+    }
+  };
+
+  /**
+   * Handle edit post action
+   */
+  const handleEdit = () => {
+    if (onEdit) {
+      onEdit(id);
+    }
+  };
+
+  /**
+   * Handle delete post action
+   */
+  const handleDelete = () => {
+    if (onDelete && confirm("Are you sure you want to delete this post?")) {
+      onDelete(id);
+    }
+  };
+
+  /**
+   * Handle comment button click
+   */
+  const handleComment = () => {
+    if (onComment) {
+      onComment(id);
+    }
+  };
+
+  /**
+   * Handle share button click
+   */
+  const handleShare = () => {
+    if (onShare) {
+      onShare(id);
+    }
+  };
+
+  /**
+   * Get user initials for avatar fallback
+   */
+  const getUserInitials = () => {
+    return (
+      user.full_name
+        .split(" ")
+        .map((n) => n[0])
+        .join("")
+        .toUpperCase()
+        .slice(0, 2) || "U"
+    );
+  };
+
   return (
-    <Card className="border-gray-200/50 dark:border-gray-700/50 overflow-hidden bg-white dark:bg-gray-900">
+    <Card className="border-gray-200/50 dark:border-gray-700/50 overflow-hidden bg-white dark:bg-gray-900 transition-all hover:shadow-md">
       <CardContent className="pt-6">
+        {/* Post Header - User info and actions */}
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-3">
-            <Avatar>
+            <Avatar className="h-10 w-10">
               <AvatarImage src={user.avatar_url || undefined} />
               <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white">
-                {user.full_name
-                  .split(" ")
-                  .map((n) => n[0])
-                  .join("")}
+                {getUserInitials()}
               </AvatarFallback>
             </Avatar>
             <div>
@@ -96,7 +189,7 @@ export function Post({
                 {isOwnPost && (
                   <Badge
                     variant="outline"
-                    className="text-xs bg-blue-50 dark:bg-blue-900/20"
+                    className="text-xs bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
                   >
                     You
                   </Badge>
@@ -110,42 +203,54 @@ export function Post({
               </div>
             </div>
           </div>
+
+          {/* Actions dropdown menu */}
           {showActions && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+                  className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 rounded-full"
                 >
                   <MoreHorizontal className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700">
+              <DropdownMenuContent
+                className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 min-w-[180px]"
+                align="end"
+              >
                 {isOwnPost && onEdit && (
                   <DropdownMenuItem
-                    onClick={() => onEdit(id)}
-                    className="text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    onClick={handleEdit}
+                    className="text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
                   >
                     <Edit className="mr-2 h-4 w-4" />
                     Edit Post
                   </DropdownMenuItem>
                 )}
+
                 <DropdownMenuItem
-                  onClick={() => onBookmark(id)}
-                  className="text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  onClick={handleBookmark}
+                  disabled={isBookmarkLoading}
+                  className="text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Bookmark
                     className={`mr-2 h-4 w-4 ${bookmarked ? "fill-current text-yellow-500" : ""}`}
                   />
-                  {bookmarked ? "Remove from Bookmarks" : "Save Post"}
+                  {isBookmarkLoading
+                    ? "Processing..."
+                    : bookmarked
+                      ? "Remove from Bookmarks"
+                      : "Save Post"}
                 </DropdownMenuItem>
+
                 {isOwnPost && onDelete && (
                   <>
                     <DropdownMenuSeparator className="bg-gray-200 dark:bg-gray-700" />
                     <DropdownMenuItem
-                      className="text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
-                      onClick={() => onDelete(id)}
+                      className="text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 cursor-pointer"
+                      onClick={handleDelete}
                     >
                       <Trash2 className="mr-2 h-4 w-4" />
                       Delete Post
@@ -157,20 +262,24 @@ export function Post({
           )}
         </div>
 
-        <p className="mb-4 text-gray-700 dark:text-gray-300 leading-relaxed">
+        {/* Post Content */}
+        <p className="mb-4 text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-line">
           {content}
         </p>
 
+        {/* Post Image */}
         {image_url && (
-          <div className="mb-4 rounded-xl overflow-hidden">
+          <div className="mb-4 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700">
             <img
               src={image_url}
-              alt="Post"
+              alt="Post content"
               className="w-full max-h-96 object-cover cursor-pointer hover:opacity-95 transition-opacity"
+              loading="lazy"
             />
           </div>
         )}
 
+        {/* Post Stats */}
         <div className="flex items-center justify-between text-gray-500 dark:text-gray-400 mb-4">
           <div className="flex items-center gap-3">
             <div className="flex items-center -space-x-1">
@@ -181,55 +290,79 @@ export function Post({
                 <span className="text-xs text-white">❤️</span>
               </div>
             </div>
-            <span>{likes_count} reactions</span>
+            <span>
+              {likes_count} {likes_count === 1 ? "reaction" : "reactions"}
+            </span>
           </div>
           <div>
-            <span>{comments_count} comments</span>
+            <span>
+              {comments_count} {comments_count === 1 ? "comment" : "comments"}
+            </span>
           </div>
         </div>
 
+        {/* Action Buttons */}
         {showActions && (
           <>
             <Separator className="mb-4 bg-gray-200 dark:bg-gray-700" />
 
             <div className="grid grid-cols-4 gap-1">
+              {/* Like Button */}
               <Button
                 variant="ghost"
                 size="sm"
-                className={`gap-2 ${liked ? "text-blue-600" : "text-gray-600 dark:text-gray-400"}`}
-                onClick={() => onLike(id)}
+                disabled={isLikeLoading}
+                className={`gap-2 rounded-lg ${liked ? "text-red-600 hover:text-red-700 bg-red-50 dark:bg-red-900/10" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"} disabled:opacity-50 disabled:cursor-not-allowed`}
+                onClick={handleLike}
               >
-                <Heart className={`h-4 w-4 ${liked ? "fill-current" : ""}`} />
-                {liked ? "Liked" : "Like"}
+                {isLikeLoading ? (
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                ) : (
+                  <Heart
+                    className={`h-4 w-4 ${liked ? "fill-current text-red-500" : ""}`}
+                  />
+                )}
+                {isLikeLoading ? "Processing..." : liked ? "Liked" : "Like"}
               </Button>
+
+              {/* Comment Button */}
               <Button
                 variant="ghost"
                 size="sm"
-                className="gap-2 text-gray-600 dark:text-gray-400"
-                onClick={() => onComment?.(id)}
+                className="gap-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
+                onClick={handleComment}
               >
                 <MessageSquare className="h-4 w-4" />
                 Comment
               </Button>
+
+              {/* Share Button */}
               <Button
                 variant="ghost"
                 size="sm"
-                className="gap-2 text-gray-600 dark:text-gray-400"
-                onClick={() => onShare?.(id)}
+                className="gap-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
+                onClick={handleShare}
               >
                 <Share2 className="h-4 w-4" />
                 Share
               </Button>
+
+              {/* Bookmark Button */}
               <Button
                 variant="ghost"
                 size="sm"
-                className={`gap-2 ${bookmarked ? "text-yellow-600" : "text-gray-600 dark:text-gray-400"}`}
-                onClick={() => onBookmark(id)}
+                disabled={isBookmarkLoading}
+                className={`gap-2 rounded-lg ${bookmarked ? "text-yellow-600 hover:text-yellow-700 bg-yellow-50 dark:bg-yellow-900/10" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"} disabled:opacity-50 disabled:cursor-not-allowed`}
+                onClick={handleBookmark}
               >
-                <Bookmark
-                  className={`h-4 w-4 ${bookmarked ? "fill-current" : ""}`}
-                />
-                Save
+                {isBookmarkLoading ? (
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                ) : (
+                  <Bookmark
+                    className={`h-4 w-4 ${bookmarked ? "fill-current text-yellow-500" : ""}`}
+                  />
+                )}
+                {isBookmarkLoading ? "Processing..." : "Save"}
               </Button>
             </div>
           </>

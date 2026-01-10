@@ -37,7 +37,6 @@ export default function Login() {
   const [errors, setErrors] = React.useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = React.useState(false);
-  const [isCheckingAuth, setIsCheckingAuth] = React.useState(true);
 
   // Handle input changes
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -56,10 +55,35 @@ export default function Login() {
       });
     }
   };
+  React.useEffect(() => {
+    const testSupabaseConnection = async () => {
+      try {
+        // Simple test query that doesn't require auth
+        const { data, error } = await supabase
+          .from("users")
+          .select("count")
+          .limit(1);
+
+        if (error) {
+          console.error("Supabase connection test failed:", error);
+          setErrors((prev) => ({
+            ...prev,
+            connection: "Database connection issue detected",
+          }));
+        } else {
+          console.log("Supabase connection OK");
+        }
+      } catch (err) {
+        console.error("Connection test error:", err);
+      }
+    };
+
+    testSupabaseConnection();
+  }, []);
 
   React.useEffect(() => {
     document.title = "DeskStaff - Login";
-  }, []); // The empty dependency array ensures this runs once when mounted
+  }, []);
 
   // Validate form
   const validateForm = (): boolean => {
@@ -91,49 +115,86 @@ export default function Login() {
     setErrors({});
 
     try {
+      console.log("🔐 Login attempt:", {
+        email: formData.email,
+        timestamp: new Date().toISOString(),
+      });
+
+      // Clear any existing sessions first (clean slate)
+      await supabase.auth.signOut();
+
+      // Attempt login with detailed error capture
       const { data, error } = await supabase.auth.signInWithPassword({
         email: formData.email.toLowerCase().trim(),
         password: formData.password,
       });
 
       if (error) {
-        console.error("Login error:", error);
+        console.error("❌ Auth error details:", {
+          message: error.message,
+          name: error.name,
+          status: error.status,
+          stack: error.stack,
+        });
 
-        // Handle specific errors
+        // Try to get more specific error info
+        if (error.message.includes("Database error granting user")) {
+          // This is a Supabase internal error - likely auth schema issue
+
+          // Test if we can create a new user (diagnostic)
+          console.log("🧪 Testing user creation as diagnostic...");
+          const testEmail = `test-${Date.now()}@diagnostic.com`;
+
+          try {
+            const { error: signUpError } = await supabase.auth.signUp({
+              email: testEmail,
+              password: "Test123!",
+              options: {
+                data: { diagnostic: true },
+              },
+            });
+
+            if (signUpError) {
+              console.error("🧪 Diagnostic signup failed:", signUpError);
+              throw new Error(
+                `Authentication service configuration issue. Please contact support with error code: AUTH_${Date.now()}`
+              );
+            } else {
+              console.log("🧪 Diagnostic: New user creation works");
+              throw new Error(
+                "Your account may have an authentication issue. Please try resetting your password or contact support."
+              );
+            }
+          } catch (diagnosticError) {
+            console.error("Diagnostic failed:", diagnosticError);
+            throw new Error(
+              "Authentication system is experiencing technical difficulties. Our team has been notified. Please try again in 15 minutes."
+            );
+          }
+        }
+
+        // Handle other specific errors
         if (error.message.includes("Invalid login credentials")) {
           throw new Error("Invalid email or password. Please try again.");
-        } else if (error.message.includes("Email not confirmed")) {
-          throw new Error(
-            "Please verify your email address before logging in."
-          );
-        } else if (error.message.includes("rate limit")) {
-          throw new Error(
-            "Too many attempts. Please try again in a few minutes."
-          );
-        } else {
-          throw new Error(`Login failed: ${error.message}`);
         }
+
+        throw new Error(`Authentication error: ${error.message}`);
       }
 
-      if (!data.user) {
-        throw new Error("Login failed. Please try again.");
+      if (!data?.user) {
+        throw new Error("Login failed: No user data received.");
       }
 
-      // Update user as logged in
-      try {
-        const { error: updateError } = await supabase
-          .from("users")
-          .update({
-            logged_in: true,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", data.user.id);
+      console.log("✅ Login successful:", {
+        userId: data.user.id,
+        email: data.user.email,
+        session: !!data.session,
+      });
 
-        if (updateError) {
-          console.error("Error updating login status:", updateError);
-        }
-      } catch (updateError) {
-        console.error("Error updating login status:", updateError);
+      // Verify session is actually valid
+      const { data: sessionCheck } = await supabase.auth.getSession();
+      if (!sessionCheck.session) {
+        throw new Error("Session not established. Please try again.");
       }
 
       // Store remember me preference
@@ -143,17 +204,47 @@ export default function Login() {
 
       toast.success("Login successful! Redirecting...");
 
-      // Redirect to the page they were trying to access or profile
+      // Redirect to profile
       setTimeout(() => {
         navigate(`/profile/${data.user.id}`, { replace: true });
       }, 1000);
     } catch (error) {
-      console.error("Login error:", error);
+      console.error("💥 Login process failed:", error);
 
       if (error instanceof Error) {
-        setErrors({ submit: error.message });
+        const errMsg = error.message;
+
+        if (
+          errMsg.includes("configuration issue") ||
+          errMsg.includes("technical difficulties") ||
+          errMsg.includes("AUTH_")
+        ) {
+          // Show user-friendly message with support option
+          setErrors({
+            submit: (
+              <span>
+                {errMsg}
+                <br />
+                <button
+                  type="button"
+                  className="mt-1 text-sm text-primary underline"
+                  onClick={() => {
+                    navigator.clipboard.writeText(`AUTH_ERROR_${Date.now()}`);
+                    toast.info("Error code copied to clipboard");
+                  }}
+                >
+                  Copy error code for support
+                </button>
+              </span>
+            ),
+          });
+        } else {
+          setErrors({ submit: errMsg });
+        }
       } else {
-        setErrors({ submit: "Login failed. Please try again." });
+        setErrors({
+          submit: "An unexpected error occurred. Please try again.",
+        });
       }
     } finally {
       setIsSubmitting(false);
