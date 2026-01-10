@@ -4,7 +4,8 @@ import { useNavigate, useParams } from "react-router";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { usePosts } from "@/hooks/usePosts";
 import {
   Card,
   CardContent,
@@ -49,6 +50,7 @@ import {
   Edit,
   MoreHorizontal,
   Heart,
+  MessageCircle,
   MessageSquare,
   Bookmark,
   Globe,
@@ -111,7 +113,6 @@ export default function Profile() {
   const [viewedUser, setViewedUser] = useState<UserProfile | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [posts, setPosts] = useState<any[]>([]);
   const [friends, setFriends] = useState<Friend[]>([]);
   const [activeTab, setActiveTab] = useState("posts");
   const [isEditing, setIsEditing] = useState(false);
@@ -136,6 +137,18 @@ export default function Profile() {
     phone: "",
     hire_date: "",
   });
+
+  const {
+    posts,
+    loading: postsLoading,
+    createPost,
+    deletePost,
+    likePost,
+    unlikePost,
+    bookmarkPost,
+    unbookmarkPost,
+    addComment,
+  } = usePosts(viewedUser?.id);
 
   // Password change state
   const [passwordForm, setPasswordForm] = useState({
@@ -728,85 +741,66 @@ export default function Profile() {
     }
   };
 
+  // handleCreatePost function:
   const handleCreatePost = async (content: string, image?: File) => {
     try {
-      const newPostObj = {
-        id: Date.now().toString(),
-        content,
-        image_url: image ? URL.createObjectURL(image) : null,
-        created_at: new Date().toISOString(),
-        likes_count: 0,
-        comments_count: 0,
-        user: {
-          id: viewedUser?.id || "",
-          full_name: viewedUser?.full_name || "",
-          avatar_url: viewedUser?.avatar_url || null,
-        },
-        liked: false,
-        bookmarked: false,
-      };
-
-      setPosts([newPostObj, ...posts]);
-      toast.success("Your post has been published");
+      const result = await createPost(content, image);
+      if (result) {
+        toast.success("Your post has been published");
+      }
     } catch (error) {
       console.error("Error creating post:", error);
       toast.error("Failed to create post");
-      throw error;
     }
   };
 
-  const handleLikePost = (postId: string) => {
-    setPosts(
-      posts.map((post) => {
-        if (post.id === postId) {
-          const wasLiked = post.liked;
-          return {
-            ...post,
-            liked: !wasLiked,
-            likes_count: wasLiked ? post.likes_count - 1 : post.likes_count + 1,
-          };
-        }
-        return post;
-      })
-    );
-
+  // handleLikePost function:
+  const handleLikePost = async (postId: string) => {
     const post = posts.find((p) => p.id === postId);
     if (post) {
-      if (!post.liked) {
-        toast.success("Post liked!");
-      } else {
-        toast.info("Post unliked");
+      const isLiked = post.likes?.[0]?.count > 0;
+      try {
+        if (isLiked) {
+          await unlikePost(postId);
+          toast.info("Post unliked");
+        } else {
+          await likePost(postId);
+          toast.success("Post liked!");
+        }
+      } catch (error: any) {
+        toast.error(error.message || "Failed to like post");
       }
     }
   };
 
-  const handleBookmarkPost = (postId: string) => {
-    setPosts(
-      posts.map((post) => {
-        if (post.id === postId) {
-          const wasBookmarked = post.bookmarked;
-          return {
-            ...post,
-            bookmarked: !wasBookmarked,
-          };
-        }
-        return post;
-      })
-    );
-
+  // handleBookmarkPost function:
+  const handleBookmarkPost = async (postId: string) => {
     const post = posts.find((p) => p.id === postId);
     if (post) {
-      if (!post.bookmarked) {
-        toast.success("Post bookmarked!");
-      } else {
-        toast.info("Post removed from bookmarks");
+      const isBookmarked = post.bookmarks?.[0]?.count > 0;
+      try {
+        if (isBookmarked) {
+          await unbookmarkPost(postId);
+          toast.info("Post removed from bookmarks");
+        } else {
+          await bookmarkPost(postId);
+          toast.success("Post bookmarked!");
+        }
+      } catch (error: any) {
+        toast.error(error.message || "Failed to bookmark post");
       }
     }
   };
 
-  const handleDeletePost = (postId: string) => {
-    setPosts(posts.filter((p) => p.id !== postId));
-    toast.success("Post deleted successfully");
+  // handleDeletePost function:
+  const handleDeletePost = async (postId: string) => {
+    try {
+      await deletePost(postId);
+      toast.success("Post deleted successfully");
+    } catch (error: any) {
+      console.error("Error deleting post:", error);
+      toast.error(error.message || "Failed to delete post");
+    }
   };
 
   if (loading) {
@@ -1206,20 +1200,185 @@ export default function Profile() {
                 </TabsList>
 
                 <TabsContent value="posts" className="space-y-6 mt-6">
-                  {posts.map((post) => (
-                    <Post
-                      key={post.id}
-                      {...post}
-                      isOwnPost={post.user.id === viewedUser?.id}
-                      onLike={handleLikePost}
-                      onBookmark={handleBookmarkPost}
-                      onComment={() =>
-                        toast.info("Comment feature coming soon!")
-                      }
-                      onShare={() => toast.success("Post shared!")}
-                      onDelete={handleDeletePost}
-                    />
-                  ))}
+                  {postsLoading && posts.length === 0 ? (
+                    <div className="flex justify-center py-8">
+                      <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+                    </div>
+                  ) : posts.length === 0 ? (
+                    <div className="text-center py-12">
+                      <div className="h-16 w-16 mx-auto rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-4">
+                        <svg
+                          className="h-8 w-8 text-gray-400"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                          />
+                        </svg>
+                      </div>
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                        No posts yet
+                      </h3>
+                      <p className="text-gray-500 dark:text-gray-400">
+                        {isOwnProfile
+                          ? "Share your first post to start the conversation"
+                          : "This user hasn't posted anything yet"}
+                      </p>
+                    </div>
+                  ) : (
+                    posts.map((post) => (
+                      <div
+                        key={post.id}
+                        className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-6"
+                      >
+                        {/* Post Header */}
+                        <div className="flex items-start justify-between mb-4">
+                          <div className="flex items-center gap-3">
+                            <Avatar className="h-10 w-10">
+                              <AvatarImage
+                                src={post.user.avatar_url || undefined}
+                              />
+                              <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white">
+                                {post.user.first_name?.[0]}
+                                {post.user.last_name?.[0]}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <h3 className="font-semibold text-gray-900 dark:text-white">
+                                {post.user.full_name}
+                              </h3>
+                              <p className="text-sm text-gray-500 dark:text-gray-400">
+                                {new Date(post.created_at).toLocaleDateString(
+                                  "en-US",
+                                  {
+                                    month: "short",
+                                    day: "numeric",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  }
+                                )}
+                              </p>
+                            </div>
+                          </div>
+                          {isOwnProfile && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeletePost(post.id)}
+                              className="text-gray-500 hover:text-red-500"
+                              title="Delete post"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+
+                        {/* Post Content */}
+                        <div className="mb-4">
+                          <p className="text-gray-800 dark:text-gray-200 whitespace-pre-wrap">
+                            {post.content}
+                          </p>
+                        </div>
+
+                        {/* Post Image */}
+                        {post.image_url && (
+                          <div className="mb-4 rounded-lg overflow-hidden">
+                            <img
+                              src={post.image_url}
+                              alt="Post"
+                              className="w-full max-h-[500px] object-cover cursor-pointer hover:opacity-95 transition-opacity"
+                              onClick={() =>
+                                window.open(post.image_url!, "_blank")
+                              }
+                              loading="lazy"
+                            />
+                          </div>
+                        )}
+
+                        {/* Post Stats */}
+                        <div className="flex items-center justify-between text-sm text-gray-500 dark:text-gray-400 mb-4">
+                          <div className="flex items-center gap-6">
+                            <button
+                              onClick={() => handleLikePost(post.id)}
+                              className="flex items-center gap-1 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                            >
+                              <Heart
+                                className={`h-4 w-4 ${post.likes?.[0]?.count > 0 ? "fill-red-500 text-red-500" : ""}`}
+                              />
+                              {post.likes?.[0]?.count || 0} likes
+                            </button>
+                            <button
+                              onClick={() => {
+                                const content = prompt("Enter your comment:");
+                                if (content && content.trim()) {
+                                  addComment(post.id, content);
+                                }
+                              }}
+                              className="flex items-center gap-1 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                            >
+                              <MessageCircle className="h-4 w-4" />
+                              {post.comments?.[0]?.count || 0} comments
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Post Actions */}
+                        <div className="flex items-center gap-2 pt-4 border-t border-gray-200 dark:border-gray-700">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="flex-1 gap-2"
+                            onClick={() => handleLikePost(post.id)}
+                          >
+                            <Heart
+                              className={`h-5 w-5 ${post.likes?.[0]?.count > 0 ? "fill-red-500 text-red-500" : ""}`}
+                            />
+                            {post.likes?.[0]?.count > 0 ? "Liked" : "Like"}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="flex-1 gap-2"
+                            onClick={() => {
+                              const content = prompt("Enter your comment:");
+                              if (content && content.trim()) {
+                                addComment(post.id, content);
+                              }
+                            }}
+                          >
+                            <MessageCircle className="h-5 w-5" />
+                            Comment
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="flex-1 gap-2"
+                            onClick={() => handleBookmarkPost(post.id)}
+                          >
+                            <svg
+                              className={`h-5 w-5 ${post.bookmarks?.[0]?.count > 0 ? "fill-yellow-500 text-yellow-500" : ""}`}
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"
+                              />
+                            </svg>
+                            {post.bookmarks?.[0]?.count > 0 ? "Saved" : "Save"}
+                          </Button>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </TabsContent>
 
                 <TabsContent value="photos">
