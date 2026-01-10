@@ -266,7 +266,7 @@ export function Header({
               size="icon"
               className="rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
               title="Home"
-              onClick={() => onNavigate("/")}
+              onClick={() => onNavigate("/feed")}
             >
               <Home className="h-5 w-5" />
             </Button>
